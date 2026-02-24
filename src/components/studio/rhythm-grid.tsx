@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Music, Save, Volume2, Waves, Clock, MoveHorizontal, Filter, Plus, Trash2, Palette, Settings2 } from 'lucide-react';
+import { Play, Square, Music, Save, Volume2, Waves, Clock, MoveHorizontal, Filter, Plus, Trash2, Palette, Settings2, Sparkles } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
@@ -26,6 +26,7 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   volume: 0.8,
   pitch: 1.0,
   delay: 0,
+  reverb: 0,
   pan: 0,
   cutoff: 1.0,
   color: 'bg-primary',
@@ -98,8 +99,14 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const gainNode = ctx.createGain();
       const panNode = ctx.createStereoPanner();
       const filterNode = ctx.createBiquadFilter();
+      
+      // Delay Chain
       const delayNode = ctx.createDelay(1.0);
-      const feedbackNode = ctx.createGain();
+      const delayGain = ctx.createGain();
+      
+      // Reverb Simulation Chain (Simulated with short dense delay)
+      const reverbNode = ctx.createDelay(0.1);
+      const reverbGain = ctx.createGain();
 
       source.buffer = buffer;
       source.playbackRate.value = settings.pitch;
@@ -109,19 +116,32 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       filterNode.type = 'lowpass';
       filterNode.frequency.value = 200 + (Math.pow(settings.cutoff, 2) * 19800);
 
+      // Primary Routing
       source.connect(filterNode);
       filterNode.connect(gainNode);
       gainNode.connect(panNode);
       panNode.connect(ctx.destination);
 
+      // Delay Routing
       if (settings.delay > 0) {
         delayNode.delayTime.value = 0.3; 
-        feedbackNode.gain.value = settings.delay * 0.7; 
+        delayGain.gain.value = settings.delay * 0.7; 
         
         gainNode.connect(delayNode);
-        delayNode.connect(feedbackNode);
-        feedbackNode.connect(delayNode);
-        delayNode.connect(panNode);
+        delayNode.connect(delayGain);
+        delayGain.connect(delayNode); // feedback
+        delayGain.connect(panNode);
+      }
+
+      // Reverb Routing (Simulated)
+      if (settings.reverb > 0) {
+        reverbNode.delayTime.value = 0.05; // Short "room" reflections
+        reverbGain.gain.value = settings.reverb * 0.5;
+        
+        gainNode.connect(reverbNode);
+        reverbNode.connect(reverbGain);
+        reverbGain.connect(reverbNode);
+        reverbGain.connect(panNode);
       }
       
       source.start();
@@ -261,7 +281,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   return (
     <div className="space-y-6">
-      {/* Dynamic Header with Sequence Controls */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-3xl shadow-sm border relative overflow-hidden">
         <div className="absolute top-0 right-0 p-4 opacity-5">
            <Settings2 className="w-24 h-24" />
@@ -324,7 +343,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         </div>
       </div>
 
-      {/* Main Sequencer Grid */}
       <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border overflow-x-auto">
         <div className="space-y-10" style={{ minWidth: `${300 + numSteps * 48}px` }}>
           {Array.from({ length: numChannels }).map((_, channelIdx) => {
@@ -332,7 +350,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
             
             return (
               <div key={channelIdx} className="flex items-start gap-10 group animate-in fade-in slide-in-from-left-4">
-                {/* Channel Mixer strip */}
                 <div className="w-80 flex flex-col gap-5 pr-8 border-r shrink-0 relative">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -356,7 +373,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                       </select>
                     </div>
                     
-                    {/* Color Picker Toggle */}
                     <div className="flex gap-1 ml-2">
                        {CHANNEL_COLORS.map(c => (
                          <button 
@@ -430,17 +446,31 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                        </div>
                        <div className="space-y-1.5">
                           <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-widest">
-                            <div className="flex items-center gap-1"><Filter className="w-2.5 h-2.5" /> Cutoff</div>
+                            <div className="flex items-center gap-1"><Sparkles className="w-2.5 h-2.5" /> Reverb</div>
                           </div>
                           <Slider 
-                            value={[settings.cutoff * 100]} 
+                            value={[settings.reverb * 100]} 
                             min={0} 
                             max={100} 
                             step={1}
-                            onValueChange={(val) => updateChannelSetting(channelIdx, 'cutoff', val[0] / 100)}
+                            onValueChange={(val) => updateChannelSetting(channelIdx, 'reverb', val[0] / 100)}
                           />
                        </div>
                     </div>
+
+                    <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-widest">
+                          <div className="flex items-center gap-1"><Filter className="w-2.5 h-2.5" /> Filter Cutoff</div>
+                          <span>{Math.round(settings.cutoff * 100)}%</span>
+                        </div>
+                        <Slider 
+                          value={[settings.cutoff * 100]} 
+                          min={0} 
+                          max={100} 
+                          step={1}
+                          onValueChange={(val) => updateChannelSetting(channelIdx, 'cutoff', val[0] / 100)}
+                        />
+                     </div>
                   </div>
 
                   <Button 
@@ -453,7 +483,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                   </Button>
                 </div>
 
-                {/* Step Sequencer */}
                 <div className="flex-1 flex gap-2 h-36 pt-1">
                   {Array.from({ length: numSteps }).map((_, stepIdx) => {
                     const clipIds = grid[`${channelIdx}-${stepIdx}`] || [];
@@ -503,22 +532,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
             <Plus className="w-6 h-6 group-hover:scale-150 transition-transform text-primary" />
             <span className="font-black uppercase tracking-[0.3em] text-xs text-primary">Add Instrument Track</span>
           </Button>
-        </div>
-        
-        {/* Legend */}
-        <div className="mt-16 flex flex-wrap justify-center gap-12 text-[10px] font-black text-muted-foreground/60 uppercase tracking-[0.2em]">
-           <div className="flex items-center gap-2">
-             <div className="w-4 h-4 rounded-md bg-muted/80 shadow-inner" /> Major Beat (1/4)
-           </div>
-           <div className="flex items-center gap-2">
-             <div className="w-4 h-4 rounded-md ring-2 ring-accent ring-offset-2 bg-white" /> Playhead Position
-           </div>
-           <div className="flex items-center gap-2">
-             <Palette className="w-3.5 h-3.5" /> Custom Track Colors
-           </div>
-           <div className="flex items-center gap-2">
-             <Settings2 className="w-3.5 h-3.5" /> Length: {numSteps} Steps
-           </div>
         </div>
       </div>
     </div>

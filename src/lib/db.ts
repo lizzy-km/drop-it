@@ -20,6 +20,7 @@ export interface ChannelSettings {
   volume: number;
   pitch: number;
   delay: number; // 0 to 1 (mix/feedback)
+  reverb: number; // 0 to 1 (room size/wetness)
   pan: number; // -1 to 1
   cutoff: number; // 0 to 1
   color: string; // Hex or tailwind class color
