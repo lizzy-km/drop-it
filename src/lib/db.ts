@@ -20,6 +20,8 @@ export interface ChannelSettings {
   volume: number;
   pitch: number;
   delay: number; // 0 to 1 (mix/feedback)
+  pan: number; // -1 to 1
+  cutoff: number; // 0 to 1
 }
 
 export interface Track {

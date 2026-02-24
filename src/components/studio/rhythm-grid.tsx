@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Music, Save, Volume2, Waves, Clock } from 'lucide-react';
+import { Play, Square, Music, Save, Volume2, Waves, Clock, MoveHorizontal, Filter } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,8 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   volume: 0.8,
   pitch: 1.0,
   delay: 0,
+  pan: 0,
+  cutoff: 1.0,
 };
 
 export function RhythmGrid({ user, clips, track, onSaveTrack }: { 
@@ -79,26 +81,35 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const buffer = await loadAudio(clip);
       const source = ctx.createBufferSource();
       const gainNode = ctx.createGain();
+      const panNode = ctx.createStereoPanner();
+      const filterNode = ctx.createBiquadFilter();
       const delayNode = ctx.createDelay(1.0);
       const feedbackNode = ctx.createGain();
 
       source.buffer = buffer;
       source.playbackRate.value = settings.pitch;
       gainNode.gain.value = settings.volume;
+      panNode.pan.value = settings.pan || 0;
+      
+      filterNode.type = 'lowpass';
+      // Map 0-1 to 200Hz - 20000Hz exponentially-ish
+      filterNode.frequency.value = 200 + (Math.pow(settings.cutoff, 2) * 19800);
 
-      // Dry Path
-      source.connect(gainNode);
-      gainNode.connect(ctx.destination);
+      // Audio Chain: source -> filter -> gain -> panner -> destination
+      source.connect(filterNode);
+      filterNode.connect(gainNode);
+      gainNode.connect(panNode);
+      panNode.connect(ctx.destination);
 
       // Wet Path (Delay)
       if (settings.delay > 0) {
-        delayNode.delayTime.value = 0.3; // Fixed delay time
-        feedbackNode.gain.value = settings.delay * 0.7; // Feedback mix scaled down
+        delayNode.delayTime.value = 0.3; // Fixed delay time for now
+        feedbackNode.gain.value = settings.delay * 0.7; // Feedback mix
         
         gainNode.connect(delayNode);
         delayNode.connect(feedbackNode);
         feedbackNode.connect(delayNode);
-        delayNode.connect(ctx.destination);
+        delayNode.connect(panNode);
       }
       
       source.start();
@@ -122,7 +133,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       if (newGrid[key].length === 0) delete newGrid[key];
     } else {
       newGrid[key] = [...(newGrid[key] || []), clipId];
-      // Preview with current channel settings
       await playClip(clipId, channel);
     }
     setGrid(newGrid);
@@ -228,20 +238,20 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       </div>
 
       <div className="bg-white rounded-3xl p-6 shadow-sm border overflow-x-auto">
-        <div className="min-w-[900px] space-y-6">
+        <div className="min-w-[1000px] space-y-8">
           {Array.from({ length: CHANNELS }).map((_, channelIdx) => {
             const settings = channelSettings[channelIdx.toString()] || DEFAULT_CHANNEL_SETTINGS;
             
             return (
-              <div key={channelIdx} className="flex items-center gap-6">
-                {/* Channel Mixer & Sound Selector */}
-                <div className="w-64 flex flex-col gap-3 pr-4 border-r shrink-0">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                      <Music className="w-4 h-4 text-muted-foreground" />
+              <div key={channelIdx} className="flex items-start gap-8">
+                {/* Channel Mixer strip */}
+                <div className="w-72 flex flex-col gap-4 pr-6 border-r shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0 shadow-inner">
+                      <Music className="w-5 h-5 text-muted-foreground" />
                     </div>
                     <select 
-                      className="text-xs bg-transparent focus:outline-none font-semibold text-primary truncate w-full cursor-pointer"
+                      className="text-xs bg-transparent focus:outline-none font-bold text-primary truncate w-full cursor-pointer hover:underline"
                       value={selectedClipsForChannel[channelIdx]}
                       onChange={(e) => {
                         const newArr = [...selectedClipsForChannel];
@@ -256,45 +266,80 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                     </select>
                   </div>
 
-                  <div className="flex flex-col gap-2 px-1">
-                    <div className="flex items-center gap-2">
-                      <Volume2 className="w-3 h-3 text-muted-foreground shrink-0" />
+                  {/* FL Studio style FX knobs represented as sliders */}
+                  <div className="grid grid-cols-1 gap-3 px-1">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-tighter">
+                        <div className="flex items-center gap-1"><Volume2 className="w-2.5 h-2.5" /> Vol</div>
+                        <span>{Math.round(settings.volume * 100)}%</span>
+                      </div>
                       <Slider 
                         value={[settings.volume * 100]} 
                         min={0} 
                         max={100} 
                         step={1}
-                        className="w-full"
                         onValueChange={(val) => updateChannelSetting(channelIdx, 'volume', val[0] / 100)}
                       />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Waves className="w-3 h-3 text-muted-foreground shrink-0" />
-                      <Slider 
-                        value={[settings.pitch * 50]} 
-                        min={25} 
-                        max={100} 
-                        step={1}
-                        className="w-full"
-                        onValueChange={(val) => updateChannelSetting(channelIdx, 'pitch', val[0] / 50)}
-                      />
+
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-tighter">
+                            <div className="flex items-center gap-1"><Waves className="w-2.5 h-2.5" /> Pitch</div>
+                          </div>
+                          <Slider 
+                            value={[settings.pitch * 50]} 
+                            min={25} 
+                            max={100} 
+                            step={1}
+                            onValueChange={(val) => updateChannelSetting(channelIdx, 'pitch', val[0] / 50)}
+                          />
+                       </div>
+                       <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-tighter">
+                            <div className="flex items-center gap-1"><MoveHorizontal className="w-2.5 h-2.5" /> Pan</div>
+                          </div>
+                          <Slider 
+                            value={[(settings.pan + 1) * 50]} 
+                            min={0} 
+                            max={100} 
+                            step={1}
+                            onValueChange={(val) => updateChannelSetting(channelIdx, 'pan', (val[0] / 50) - 1)}
+                          />
+                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
-                      <Slider 
-                        value={[settings.delay * 100]} 
-                        min={0} 
-                        max={100} 
-                        step={1}
-                        className="w-full"
-                        onValueChange={(val) => updateChannelSetting(channelIdx, 'delay', val[0] / 100)}
-                      />
+
+                    <div className="grid grid-cols-2 gap-4">
+                       <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-tighter">
+                            <div className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Delay</div>
+                          </div>
+                          <Slider 
+                            value={[settings.delay * 100]} 
+                            min={0} 
+                            max={100} 
+                            step={1}
+                            onValueChange={(val) => updateChannelSetting(channelIdx, 'delay', val[0] / 100)}
+                          />
+                       </div>
+                       <div className="space-y-1">
+                          <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-tighter">
+                            <div className="flex items-center gap-1"><Filter className="w-2.5 h-2.5" /> Cutoff</div>
+                          </div>
+                          <Slider 
+                            value={[settings.cutoff * 100]} 
+                            min={0} 
+                            max={100} 
+                            step={1}
+                            onValueChange={(val) => updateChannelSetting(channelIdx, 'cutoff', val[0] / 100)}
+                          />
+                       </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Step Sequencer */}
-                <div className="flex-1 grid grid-cols-16 gap-1.5 h-16">
+                <div className="flex-1 grid grid-cols-16 gap-2 h-32 pt-1">
                   {Array.from({ length: STEPS }).map((_, stepIdx) => {
                     const clipIds = grid[`${channelIdx}-${stepIdx}`] || [];
                     const clipId = clipIds[0];
@@ -307,18 +352,18 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                         key={stepIdx}
                         onClick={() => toggleCell(channelIdx, stepIdx)}
                         className={cn(
-                          "rounded-xl transition-all flex items-center justify-center relative overflow-hidden h-full",
-                          stepIdx === currentStep ? "ring-2 ring-accent ring-offset-2 z-10" : "",
+                          "rounded-2xl transition-all flex items-center justify-center relative overflow-hidden group/cell",
+                          stepIdx === currentStep ? "ring-4 ring-accent ring-offset-2 z-10" : "",
                           clip 
-                            ? "bg-primary text-white scale-100 shadow-md border-b-4 border-primary/50" 
-                            : "bg-muted/30 hover:bg-muted scale-95",
-                          stepIdx % 4 === 0 && !clip ? "bg-muted/60" : ""
+                            ? "bg-primary text-white scale-100 shadow-lg border-b-8 border-primary/50 translate-y-[-2px]" 
+                            : "bg-muted/30 hover:bg-muted/50 scale-95",
+                          stepIdx % 4 === 0 && !clip ? "bg-muted/50" : ""
                         )}
                       >
                         {CharIcon && (
                           <CharIcon 
                             className={cn(
-                              "w-10 h-10 opacity-90", 
+                              "w-12 h-12 opacity-90 transition-transform group-hover/cell:scale-110", 
                               stepIdx === currentStep ? "animate-bounce" : "animate-bounce-subtle"
                             )} 
                           />
@@ -335,15 +380,15 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
           })}
         </div>
         
-        <div className="mt-8 flex justify-center gap-12 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+        <div className="mt-12 flex flex-wrap justify-center gap-12 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">
            <div className="flex items-center gap-2">
-             <div className="w-3 h-3 rounded bg-primary" /> Active Sound
+             <div className="w-4 h-4 rounded-md bg-primary shadow-sm" /> Active Step
            </div>
            <div className="flex items-center gap-2">
-             <div className="w-3 h-3 rounded bg-muted/60" /> Beat Highlight
+             <div className="w-4 h-4 rounded-md bg-muted/60 shadow-inner" /> Major Beat
            </div>
            <div className="flex items-center gap-2">
-             <div className="w-3 h-3 rounded ring-2 ring-accent" /> Playhead
+             <div className="w-4 h-4 rounded-md ring-2 ring-accent ring-offset-2" /> Playhead
            </div>
         </div>
       </div>
