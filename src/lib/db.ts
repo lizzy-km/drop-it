@@ -110,11 +110,21 @@ export const db = {
     return tracks;
   },
 
+  getTrack: (trackId: string): Track | null => {
+    const tracks = db.getTracks();
+    return tracks.find(t => t.id === trackId) || null;
+  },
+
   saveTrack: (track: Track) => {
     const tracks = db.getTracks();
     const existing = tracks.findIndex(t => t.id === track.id);
     if (existing > -1) tracks[existing] = track;
     else tracks.push(track);
+    localStorage.setItem(STORAGE_KEYS.TRACKS, JSON.stringify(tracks));
+  },
+
+  deleteTrack: (trackId: string) => {
+    const tracks = db.getTracks().filter(t => t.id !== trackId);
     localStorage.setItem(STORAGE_KEYS.TRACKS, JSON.stringify(tracks));
   },
 

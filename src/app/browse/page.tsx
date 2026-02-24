@@ -1,18 +1,22 @@
 
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { db, User, Track, AudioClip } from '@/lib/db';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Heart, Play, User as UserIcon, Calendar, Music, Square, Loader2 } from 'lucide-react';
+import { ChevronLeft, Heart, Play, Music, Square, Loader2, Trash2, Edit3, Copy, MoreVertical } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { toast } from '@/hooks/use-toast';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 export default function BrowsePage() {
   const [creations, setCreations] = useState<any[]>([]);
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const router = useRouter();
   
   const audioContextRef = useRef<AudioContext | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -20,6 +24,7 @@ export default function BrowsePage() {
 
   useEffect(() => {
     setCreations(db.getAllCreations());
+    setCurrentUser(db.getCurrentUser());
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
@@ -42,6 +47,7 @@ export default function BrowsePage() {
       audioBuffersRef.current[clip.id] = audioBuffer;
       return audioBuffer;
     } catch (e) {
+      console.error("Audio Load Error:", e);
       return null;
     }
   };
@@ -86,10 +92,13 @@ export default function BrowsePage() {
       const ctx = initAudioContext();
       if (ctx.state === 'suspended') await ctx.resume();
 
-      // Get all clips needed for this track
       const allClips = db.getClips();
       const usedClipIds = new Set(Object.values(track.grid).flat());
       const requiredClips = allClips.filter(c => usedClipIds.has(c.id));
+
+      if (requiredClips.length === 0 && usedClipIds.size > 0) {
+        throw new Error("Missing audio assets for this track");
+      }
 
       await Promise.all(requiredClips.map(clip => loadAudio(clip)));
 
@@ -110,9 +119,33 @@ export default function BrowsePage() {
       }, stepInterval);
 
     } catch (err) {
+      console.error(err);
       setIsLoading(null);
-      toast({ title: "Playback Error", variant: "destructive" });
+      toast({ title: "Playback Error", description: "Could not load studio assets.", variant: "destructive" });
     }
+  };
+
+  const handleDelete = (id: string) => {
+    db.deleteTrack(id);
+    setCreations(db.getAllCreations());
+    toast({ title: "Track Deleted" });
+  };
+
+  const handleRemix = (track: Track) => {
+    if (!currentUser) {
+      toast({ title: "Login Required", description: "Select a profile first." });
+      return;
+    }
+    const newTrack = {
+      ...track,
+      id: crypto.randomUUID(),
+      userId: currentUser.id,
+      title: `REMIX_OF_${track.title}`,
+      createdAt: Date.now()
+    };
+    db.saveTrack(newTrack);
+    toast({ title: "Track Remixed!", description: "Copied to your studio." });
+    router.push('/studio?id=' + newTrack.id);
   };
 
   return (
@@ -153,14 +186,34 @@ export default function BrowsePage() {
                         <img src={track.user?.avatar || 'https://picsum.photos/seed/default/200'} className="w-14 h-14 rounded-2xl object-cover ring-2 ring-primary/20" alt="" />
                         <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-card" />
                       </div>
-                      <div>
-                        <h3 className="font-black text-xl leading-none text-primary italic tracking-tight uppercase truncate max-w-[180px]">{track.title}</h3>
+                      <div className="min-w-0">
+                        <h3 className="font-black text-xl leading-none text-primary italic tracking-tight uppercase truncate max-w-[150px]">{track.title}</h3>
                         <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mt-1 block">@{track.user?.name.replace(/\s+/g, '_').toLowerCase()}</span>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="rounded-full text-primary hover:bg-primary/10">
-                      <Heart className="w-5 h-5" />
-                    </Button>
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="rounded-full text-primary hover:bg-primary/10">
+                          <MoreVertical className="w-5 h-5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="glass-panel border-primary/20 rounded-2xl p-2 min-w-[160px]">
+                        {currentUser?.id === track.userId && (
+                          <DropdownMenuItem className="focus:bg-primary/10 rounded-xl cursor-pointer py-3" onClick={() => router.push(`/studio?id=${track.id}`)}>
+                            <Edit3 className="w-4 h-4 mr-3 text-primary" /> <span className="text-xs font-black uppercase">Edit Signal</span>
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem className="focus:bg-primary/10 rounded-xl cursor-pointer py-3" onClick={() => handleRemix(track)}>
+                          <Copy className="w-4 h-4 mr-3 text-primary" /> <span className="text-xs font-black uppercase">Remix / Copy</span>
+                        </DropdownMenuItem>
+                        {currentUser?.id === track.userId && (
+                          <DropdownMenuItem className="focus:bg-destructive/10 text-destructive rounded-xl cursor-pointer py-3" onClick={() => handleDelete(track.id)}>
+                            <Trash2 className="w-4 h-4 mr-3" /> <span className="text-xs font-black uppercase">Destroy</span>
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
 
                   <div className="bg-black/40 rounded-[2.5rem] p-10 relative group/visualizer overflow-hidden h-40 flex items-center justify-center border border-white/5 shadow-inner">
@@ -186,13 +239,12 @@ export default function BrowsePage() {
 
                   <div className="flex items-center justify-between text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] pt-4 border-t border-white/5">
                     <div className="flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 text-primary/60" />
-                      {new Date(track.createdAt).toLocaleDateString()}
-                    </div>
-                    <div className="flex items-center gap-2">
                       <Music className="w-3.5 h-3.5 text-primary/60" />
                       {track.bpm} BPM
                     </div>
+                    <Button variant="ghost" size="sm" className="h-6 text-[10px] font-black text-primary/40 hover:text-primary">
+                      <Heart className="w-3.5 h-3.5 mr-1" /> LIKE
+                    </Button>
                   </div>
                 </div>
               </div>

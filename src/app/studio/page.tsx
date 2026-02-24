@@ -1,24 +1,28 @@
+
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { db, User, AudioClip } from '@/lib/db';
+import React, { useEffect, useState, Suspense } from 'react';
+import { db, User, AudioClip, Track } from '@/lib/db';
 import { VoiceRecorder } from '@/components/studio/voice-recorder';
 import { AudioUploader } from '@/components/studio/audio-uploader';
 import { RhythmGrid } from '@/components/studio/rhythm-grid';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Disc, Library, Trash2, LayoutDashboard, Zap, Settings2 } from 'lucide-react';
+import { ChevronLeft, Library, Trash2, LayoutDashboard, Zap, Settings2 } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
 
-export default function StudioPage() {
+function StudioContent() {
   const [user, setUser] = useState<User | null>(null);
   const [clips, setClips] = useState<AudioClip[]>([]);
+  const [loadedTrack, setLoadedTrack] = useState<Track | undefined>(undefined);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const trackId = searchParams.get('id');
 
   useEffect(() => {
     const currentUser = db.getCurrentUser();
@@ -28,7 +32,12 @@ export default function StudioPage() {
     }
     setUser(currentUser);
     setClips(db.getClips(currentUser.id));
-  }, [router]);
+
+    if (trackId) {
+      const track = db.getTrack(trackId);
+      if (track) setLoadedTrack(track);
+    }
+  }, [router, trackId]);
 
   const refreshClips = () => {
     if (user) setClips(db.getClips(user.id));
@@ -40,23 +49,17 @@ export default function StudioPage() {
   };
 
   const updateClipMetadata = (id: string, name: string, characterType: string) => {
-    const clip = clips.find(c => c.id === id);
-    if (clip) {
-      const updatedClips = clips.map(c => c.id === id ? { ...c, name, characterType } : c);
-      // We need a proper db method, for now let's just rewrite the clips array
-      const allClips = db.getClips();
-      const newAllClips = allClips.map(c => c.id === id ? { ...c, name, characterType } : c);
-      localStorage.setItem('dropit_clips', JSON.stringify(newAllClips));
-      setClips(updatedClips);
-      toast({ title: "Asset Updated" });
-    }
+    const allClips = db.getClips();
+    const newAllClips = allClips.map(c => c.id === id ? { ...c, name, characterType } : c);
+    localStorage.setItem('dropit_clips', JSON.stringify(newAllClips));
+    setClips(newAllClips.filter(c => user && c.userId === user.id));
+    toast({ title: "Asset Updated" });
   };
 
   if (!user) return null;
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-24 studio-grid-bg">
-      {/* Top Navigation */}
       <header className="glass-panel border-b border-primary/20 px-10 py-5 flex items-center justify-between sticky top-0 z-[100]">
         <div className="flex items-center gap-10">
           <Link href="/">
@@ -91,20 +94,17 @@ export default function StudioPage() {
       </header>
 
       <main className="max-w-[1600px] mx-auto px-10 py-12 space-y-16">
-        {/* Main Sequencer Hero Section */}
         <section className="animate-in fade-in zoom-in-95 duration-700">
-          <RhythmGrid user={user} clips={clips} onSaveTrack={() => {}} />
+          <RhythmGrid key={loadedTrack?.id} user={user} clips={clips} track={loadedTrack} onSaveTrack={() => {}} />
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-          {/* Recording & Assets */}
           <div className="lg:col-span-8 space-y-12">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
               <VoiceRecorder user={user} onClipSaved={refreshClips} />
               <AudioUploader user={user} onClipSaved={refreshClips} />
             </div>
 
-            {/* Compact Library View */}
             <div className="glass-panel rounded-[2.5rem] p-12 gold-border">
                <div className="flex items-center justify-between mb-10">
                  <h3 className="text-3xl font-black flex items-center gap-4 italic tracking-tighter text-primary">
@@ -147,7 +147,7 @@ export default function StudioPage() {
                                     <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Clip Name</Label>
                                     <input 
                                       defaultValue={clip.name}
-                                      onChange={(e) => clip.name = e.target.value.toUpperCase()}
+                                      id={`clip-name-${clip.id}`}
                                       className="w-full bg-black/40 border border-primary/20 rounded-2xl p-4 text-primary font-black uppercase outline-none focus:border-primary"
                                     />
                                   </div>
@@ -157,7 +157,12 @@ export default function StudioPage() {
                                       {CHARACTER_TYPES.map(ct => (
                                         <button 
                                           key={ct.id}
-                                          onClick={() => clip.characterType = ct.id}
+                                          onClick={() => {
+                                             const allClips = db.getClips();
+                                             const updated = allClips.map(c => c.id === clip.id ? { ...c, characterType: ct.id } : c);
+                                             localStorage.setItem('dropit_clips', JSON.stringify(updated));
+                                             setClips(updated.filter(c => user && c.userId === user.id));
+                                          }}
                                           className={cn("p-4 rounded-2xl border-2 transition-all flex justify-center", clip.characterType === ct.id ? "border-primary bg-primary/10" : "border-transparent bg-black/20")}
                                         >
                                           <ct.icon className={cn("w-8 h-8", ct.color)} />
@@ -169,7 +174,10 @@ export default function StudioPage() {
                                 <DialogFooter>
                                   <Button 
                                     className="w-full bg-primary text-black font-black uppercase tracking-widest rounded-full h-12"
-                                    onClick={() => updateClipMetadata(clip.id, clip.name, clip.characterType)}
+                                    onClick={() => {
+                                      const input = document.getElementById(`clip-name-${clip.id}`) as HTMLInputElement;
+                                      updateClipMetadata(clip.id, input.value.toUpperCase(), clip.characterType);
+                                    }}
                                   >
                                     Save Changes
                                   </Button>
@@ -193,12 +201,8 @@ export default function StudioPage() {
             </div>
           </div>
 
-          {/* Side Info/Stats */}
           <div className="lg:col-span-4 space-y-10">
              <div className="bg-primary p-12 rounded-[3rem] text-black relative overflow-hidden group shadow-2xl gold-shadow">
-                <div className="absolute top-0 right-0 p-10 opacity-10 group-hover:rotate-12 transition-transform duration-700 pointer-events-none">
-                  <Disc className="w-64 h-64" />
-                </div>
                 <h3 className="text-4xl font-black italic mb-8 tracking-tighter">STUDIO_GUIDE</h3>
                 <div className="space-y-8 font-bold text-sm leading-relaxed">
                   <div className="flex gap-5 items-start">
@@ -208,10 +212,6 @@ export default function StudioPage() {
                   <div className="flex gap-5 items-start">
                     <div className="w-8 h-8 rounded-2xl bg-black flex items-center justify-center text-xs text-primary shrink-0 font-black">02</div>
                     <p>Sculpt each channel using Volume, Pitch, Pan, and Filter controls.</p>
-                  </div>
-                  <div className="flex gap-5 items-start">
-                    <div className="w-8 h-8 rounded-2xl bg-black flex items-center justify-center text-xs text-primary shrink-0 font-black">03</div>
-                    <p>Export your session as a high-fidelity WAV file with the download icon.</p>
                   </div>
                 </div>
              </div>
@@ -226,15 +226,19 @@ export default function StudioPage() {
                     <div className="text-3xl font-black text-primary">{clips.length}</div>
                     <div className="text-[9px] font-black uppercase text-muted-foreground tracking-widest mt-1">Samples</div>
                   </div>
-                  <div className="bg-black/40 p-6 rounded-[2rem] text-center gold-border">
-                    <div className="text-3xl font-black text-primary">1</div>
-                    <div className="text-[9px] font-black uppercase text-muted-foreground tracking-widest mt-1">Project</div>
-                  </div>
                 </div>
              </div>
           </div>
         </div>
       </main>
     </div>
+  );
+}
+
+export default function StudioPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="w-10 h-10 text-primary animate-spin" /></div>}>
+      <StudioContent />
+    </Suspense>
   );
 }
