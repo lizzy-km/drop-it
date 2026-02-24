@@ -379,7 +379,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
           onClick={addChannel}
         >
           <Plus className="w-5 h-5 text-primary group-hover:scale-125 duration-300" />
-          <span className="font-black uppercase tracking-[0.4em] text-[10px] text-muted-foreground group-hover:text-primary">Append Track</span>
+          <span className="font-black uppercase tracking-[0.4em] text-[10px] text-muted-foreground group-hover:text-primary">New Track</span>
         </Button>
       </div>
     </div>
