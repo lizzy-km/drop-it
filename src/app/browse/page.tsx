@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef } from 'react';
-import { db, User, Track, AudioClip } from '@/lib/db';
+import { db, User, Track, AudioClip, ChannelSettings } from '@/lib/db';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, Heart, Play, Music, Square, Loader2, Trash2, Edit3, Copy, MoreVertical } from 'lucide-react';
 import Link from 'next/link';
@@ -10,6 +10,18 @@ import { useRouter } from 'next/navigation';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { toast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+
+const makeDistortionCurve = (amount: number) => {
+  const k = amount * 100;
+  const n_samples = 44100;
+  const curve = new Float32Array(n_samples);
+  const deg = Math.PI / 180;
+  for (let i = 0; i < n_samples; ++i) {
+    const x = (i * 2) / n_samples - 1;
+    curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
+  }
+  return curve;
+};
 
 export default function BrowsePage() {
   const [creations, setCreations] = useState<any[]>([]);
@@ -21,6 +33,8 @@ export default function BrowsePage() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioBuffersRef = useRef<Record<string, AudioBuffer>>({});
+  const reversedBuffersRef = useRef<Record<string, AudioBuffer>>({});
+  const masterCompressorRef = useRef<DynamicsCompressorNode | null>(null);
 
   useEffect(() => {
     setCreations(db.getAllCreations());
@@ -33,9 +47,36 @@ export default function BrowsePage() {
 
   const initAudioContext = () => {
     if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-12, ctx.currentTime);
+      compressor.knee.setValueAtTime(30, ctx.currentTime);
+      compressor.ratio.setValueAtTime(4, ctx.currentTime);
+      compressor.attack.setValueAtTime(0.003, ctx.currentTime);
+      compressor.release.setValueAtTime(0.25, ctx.currentTime);
+      compressor.connect(ctx.destination);
+      masterCompressorRef.current = compressor;
+      audioContextRef.current = ctx;
     }
     return audioContextRef.current;
+  };
+
+  const getReversedBuffer = (originalBuffer: AudioBuffer, clipId: string) => {
+    if (reversedBuffersRef.current[clipId]) return reversedBuffersRef.current[clipId];
+    const reversedBuffer = new AudioBuffer({
+      length: originalBuffer.length,
+      numberOfChannels: originalBuffer.numberOfChannels,
+      sampleRate: originalBuffer.sampleRate
+    });
+    for (let i = 0; i < originalBuffer.numberOfChannels; i++) {
+      const originalData = originalBuffer.getChannelData(i);
+      const reversedData = reversedBuffer.getChannelData(i);
+      for (let j = 0; j < originalBuffer.length; j++) {
+        reversedData[j] = originalData[originalBuffer.length - 1 - j];
+      }
+    }
+    reversedBuffersRef.current[clipId] = reversedBuffer;
+    return reversedBuffer;
   };
 
   const loadAudio = async (clip: AudioClip) => {
@@ -53,39 +94,61 @@ export default function BrowsePage() {
     }
   };
 
-  const playClip = (clipId: string, track: Track, ctx: AudioContext) => {
-    const buffer = audioBuffersRef.current[clipId];
+  const playClip = (clipId: string, channelIdx: string, track: Track, ctx: AudioContext) => {
+    let buffer = audioBuffersRef.current[clipId];
     if (!buffer) return;
+
+    const settings = track.channelSettings[channelIdx];
+    if (!settings || settings.muted) return;
+
+    if (settings.reversed) {
+      buffer = getReversedBuffer(buffer, clipId);
+    }
 
     const source = ctx.createBufferSource();
     const gainNode = ctx.createGain();
     const filterNode = ctx.createBiquadFilter();
+    const panNode = ctx.createStereoPanner();
+    const distortionNode = ctx.createWaveShaper();
     
-    // Find settings for this channel
-    let volume = 0.8;
-    let pitch = 1.0;
-    let cutoff = 1.0;
-    
-    Object.keys(track.selectedClips).forEach(chIdx => {
-      if (track.selectedClips[chIdx] === clipId) {
-        const settings = track.channelSettings[chIdx];
-        if (settings) {
-          volume = settings.volume ?? 0.8;
-          pitch = settings.pitch ?? 1.0;
-          cutoff = settings.cutoff ?? 1.0;
-        }
-      }
-    });
+    // Pitch calculation including Auto-Tune simulation
+    let finalPitch = settings.pitch ?? 1.0;
+    if (settings.autoTune > 0) {
+      const semitoneFactor = Math.pow(2, 1/12);
+      const currentSteps = Math.log(finalPitch) / Math.log(semitoneFactor);
+      const snappedPitch = Math.pow(semitoneFactor, Math.round(currentSteps));
+      finalPitch = (finalPitch * (1 - settings.autoTune)) + (snappedPitch * settings.autoTune);
+    }
 
     source.buffer = buffer;
-    source.playbackRate.value = pitch;
-    gainNode.gain.value = volume;
-    filterNode.frequency.value = 200 + (Math.pow(cutoff, 2) * 19800);
+    source.playbackRate.value = finalPitch;
+    gainNode.gain.setValueAtTime(0, ctx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(settings.volume ?? 0.8, ctx.currentTime + (settings.attack || 0));
+    
+    panNode.pan.value = settings.pan || 0;
+    filterNode.frequency.value = 200 + (Math.pow(settings.cutoff || 1, 2) * 19800);
+    
+    if (settings.distortion > 0) {
+      distortionNode.curve = makeDistortionCurve(settings.distortion);
+      distortionNode.oversample = '4x';
+    }
 
-    source.connect(filterNode);
+    const trimStart = (settings.trimStart || 0) * buffer.duration;
+    const trimEnd = (settings.trimEnd || 1) * buffer.duration;
+    const playDuration = Math.max(0, trimEnd - trimStart) / finalPitch;
+
+    // Release envelope
+    const releaseStartTime = ctx.currentTime + playDuration - (settings.release || 0.1);
+    gainNode.gain.setValueAtTime(settings.volume ?? 0.8, Math.max(ctx.currentTime + (settings.attack || 0), releaseStartTime));
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + playDuration);
+
+    source.connect(settings.distortion > 0 ? distortionNode : filterNode);
+    if (settings.distortion > 0) distortionNode.connect(filterNode);
     filterNode.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    source.start(0);
+    gainNode.connect(panNode);
+    panNode.connect(masterCompressorRef.current || ctx.destination);
+
+    source.start(0, trimStart, playDuration);
   };
 
   const stopPlayback = () => {
@@ -106,7 +169,6 @@ export default function BrowsePage() {
       const ctx = initAudioContext();
       if (ctx.state === 'suspended') await ctx.resume();
 
-      // Ensure all clips for this track are loaded
       const usedClipIds = new Set(Object.values(track.grid).flat());
       const allClips = db.getClips();
       const requiredClips = allClips.filter(c => usedClipIds.has(c.id));
@@ -128,7 +190,7 @@ export default function BrowsePage() {
         for (let ch = 0; ch < track.numChannels; ch++) {
           const clipIds = track.grid[`${ch}-${currentStep}`];
           if (clipIds) {
-            clipIds.forEach(id => playClip(id, track, ctx));
+            clipIds.forEach(id => playClip(id, ch.toString(), track, ctx));
           }
         }
         currentStep = (currentStep + 1) % track.numSteps;
