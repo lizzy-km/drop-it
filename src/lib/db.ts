@@ -22,6 +22,7 @@ export interface ChannelSettings {
   delay: number; // 0 to 1 (mix/feedback)
   pan: number; // -1 to 1
   cutoff: number; // 0 to 1
+  color: string; // Hex or tailwind class color
 }
 
 export interface Track {
@@ -30,6 +31,7 @@ export interface Track {
   title: string;
   bpm: number;
   numChannels: number;
+  numSteps: number;
   grid: Record<string, string[]>; // e.g., { "0-0": ["clipId1"], "1-4": ["clipId2"] }
   channelSettings: Record<string, ChannelSettings>;
   selectedClips: Record<string, string>; // Maps channel index string to clip ID

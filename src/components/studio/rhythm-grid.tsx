@@ -3,15 +3,24 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Music, Save, Volume2, Waves, Clock, MoveHorizontal, Filter, Plus, Trash2 } from 'lucide-react';
+import { Play, Square, Music, Save, Volume2, Waves, Clock, MoveHorizontal, Filter, Plus, Trash2, Palette, Settings2 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { Slider } from '@/components/ui/slider';
 
-const STEPS = 16;
 const DEFAULT_CHANNELS = 4;
+const MAX_STEPS = 64;
+
+const CHANNEL_COLORS = [
+  { name: 'Purple', class: 'bg-primary', hex: '#8b5cf6' },
+  { name: 'Red', class: 'bg-red-500', hex: '#ef4444' },
+  { name: 'Blue', class: 'bg-blue-500', hex: '#3b82f6' },
+  { name: 'Green', class: 'bg-green-500', hex: '#22c55e' },
+  { name: 'Pink', class: 'bg-pink-500', hex: '#ec4899' },
+  { name: 'Orange', class: 'bg-orange-500', hex: '#f97316' },
+];
 
 const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   volume: 0.8,
@@ -19,6 +28,7 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   delay: 0,
   pan: 0,
   cutoff: 1.0,
+  color: 'bg-primary',
 };
 
 export function RhythmGrid({ user, clips, track, onSaveTrack }: { 
@@ -30,11 +40,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
   const [bpm, setBpm] = useState(track?.bpm || 120);
+  const [numSteps, setNumSteps] = useState(track?.numSteps || 16);
   const [numChannels, setNumChannels] = useState(track?.numChannels || DEFAULT_CHANNELS);
   const [grid, setGrid] = useState<Record<string, string[]>>(track?.grid || {});
   const [channelSettings, setChannelSettings] = useState<Record<string, ChannelSettings>>(
     track?.channelSettings || 
-    Object.fromEntries(Array.from({ length: DEFAULT_CHANNELS }).map((_, i) => [i.toString(), { ...DEFAULT_CHANNEL_SETTINGS }]))
+    Object.fromEntries(Array.from({ length: DEFAULT_CHANNELS }).map((_, i) => [i.toString(), { ...DEFAULT_CHANNEL_SETTINGS, color: CHANNEL_COLORS[i % CHANNEL_COLORS.length].class }]))
   );
   const [selectedClipsForChannel, setSelectedClipsForChannel] = useState<Record<string, string>>(
     track?.selectedClips || 
@@ -159,7 +170,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const stepInterval = (60 / bpm) / 4 * 1000;
       timerRef.current = setInterval(() => {
         setCurrentStep(prev => {
-          const next = (prev + 1) % STEPS;
+          const next = (prev + 1) % numSteps;
           for (let c = 0; c < numChannels; c++) {
             const clipIds = grid[`${c}-${next}`];
             if (clipIds) {
@@ -173,9 +184,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPlaying, bpm, grid, playClip, numChannels]);
+  }, [isPlaying, bpm, grid, playClip, numChannels, numSteps]);
 
-  const updateChannelSetting = (channelIdx: number, key: keyof ChannelSettings, value: number) => {
+  const updateChannelSetting = (channelIdx: number, key: keyof ChannelSettings, value: any) => {
     setChannelSettings(prev => ({
       ...prev,
       [channelIdx.toString()]: {
@@ -190,7 +201,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     setNumChannels(prev => prev + 1);
     setChannelSettings(prev => ({
       ...prev,
-      [newChannelIdx.toString()]: { ...DEFAULT_CHANNEL_SETTINGS }
+      [newChannelIdx.toString()]: { ...DEFAULT_CHANNEL_SETTINGS, color: CHANNEL_COLORS[newChannelIdx % CHANNEL_COLORS.length].class }
     }));
     setSelectedClipsForChannel(prev => ({
       ...prev,
@@ -207,7 +218,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     const newNum = numChannels - 1;
     setNumChannels(newNum);
 
-    // Filter grid, settings, and selected clips
     const newGrid: Record<string, string[]> = {};
     Object.keys(grid).forEach(key => {
       const [c, s] = key.split('-').map(Number);
@@ -238,6 +248,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       title,
       bpm,
       numChannels,
+      numSteps,
       grid,
       channelSettings,
       selectedClips: selectedClipsForChannel,
@@ -250,76 +261,122 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-2xl shadow-sm border">
-        <div className="flex items-center gap-4">
+      {/* Dynamic Header with Sequence Controls */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-6 rounded-3xl shadow-sm border relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-5">
+           <Settings2 className="w-24 h-24" />
+        </div>
+
+        <div className="flex flex-col md:flex-row md:items-center gap-6 relative z-10">
           <input 
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="text-xl font-bold bg-transparent border-none focus:ring-0 w-full md:w-auto outline-none"
+            className="text-2xl font-black bg-transparent border-none focus:ring-0 w-full md:w-auto outline-none text-primary"
             placeholder="Untitled Drop..."
           />
-          <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-full text-xs font-bold">
-            <span>{bpm} BPM</span>
-            <input 
-              type="range" 
-              min="60" 
-              max="200" 
-              value={bpm} 
-              onChange={(e) => setBpm(parseInt(e.target.value))}
-              className="w-24 accent-primary cursor-pointer"
-            />
+          
+          <div className="flex flex-wrap items-center gap-6">
+            <div className="flex items-center gap-3 bg-muted/40 px-4 py-2 rounded-2xl">
+              <span className="text-[10px] font-black uppercase text-muted-foreground">Tempo</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold w-12">{bpm} BPM</span>
+                <input 
+                  type="range" 
+                  min="60" 
+                  max="200" 
+                  value={bpm} 
+                  onChange={(e) => setBpm(parseInt(e.target.value))}
+                  className="w-24 accent-primary cursor-pointer"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 bg-muted/40 px-4 py-2 rounded-2xl">
+              <span className="text-[10px] font-black uppercase text-muted-foreground">Length</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold w-12">{numSteps} Steps</span>
+                <input 
+                  type="range" 
+                  min="4" 
+                  max={MAX_STEPS} 
+                  step="4"
+                  value={numSteps} 
+                  onChange={(e) => setNumSteps(parseInt(e.target.value))}
+                  className="w-24 accent-accent cursor-pointer"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 relative z-10">
           <Button 
             variant={isPlaying ? "destructive" : "default"} 
-            className="rounded-full px-6"
+            className="rounded-full px-8 h-12 font-bold shadow-lg"
             onClick={handlePlayToggle}
           >
-            {isPlaying ? <Square className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+            {isPlaying ? <Square className="w-5 h-5 mr-2" /> : <Play className="w-5 h-5 mr-2" />}
             {isPlaying ? "Stop" : "Play Beat"}
           </Button>
-          <Button variant="outline" className="rounded-full" onClick={saveCurrentTrack}>
-             <Save className="w-4 h-4 mr-2" /> Save Creation
+          <Button variant="outline" className="rounded-full h-12 px-6 font-bold" onClick={saveCurrentTrack}>
+             <Save className="w-5 h-5 mr-2" /> Save Creation
           </Button>
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl p-6 shadow-sm border overflow-x-auto">
-        <div className="min-w-[1000px] space-y-8">
+      {/* Main Sequencer Grid */}
+      <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border overflow-x-auto">
+        <div className="space-y-10" style={{ minWidth: `${300 + numSteps * 48}px` }}>
           {Array.from({ length: numChannels }).map((_, channelIdx) => {
             const settings = channelSettings[channelIdx.toString()] || DEFAULT_CHANNEL_SETTINGS;
             
             return (
-              <div key={channelIdx} className="flex items-start gap-8 group">
+              <div key={channelIdx} className="flex items-start gap-10 group animate-in fade-in slide-in-from-left-4">
                 {/* Channel Mixer strip */}
-                <div className="w-72 flex flex-col gap-4 pr-6 border-r shrink-0 relative">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0 shadow-inner">
-                      <Music className="w-5 h-5 text-muted-foreground" />
+                <div className="w-80 flex flex-col gap-5 pr-8 border-r shrink-0 relative">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-inner", settings.color, "bg-opacity-20")}>
+                        <Music className={cn("w-5 h-5", settings.color.replace('bg-', 'text-'))} />
+                      </div>
+                      <select 
+                        className="text-xs bg-transparent focus:outline-none font-black text-primary truncate w-full cursor-pointer hover:underline uppercase tracking-widest"
+                        value={selectedClipsForChannel[channelIdx.toString()] || ''}
+                        onChange={(e) => {
+                          setSelectedClipsForChannel(prev => ({
+                            ...prev,
+                            [channelIdx.toString()]: e.target.value
+                          }));
+                        }}
+                      >
+                        <option value="">Select Sound...</option>
+                        {clips.map(clip => (
+                          <option key={clip.id} value={clip.id}>{clip.name}</option>
+                        ))}
+                      </select>
                     </div>
-                    <select 
-                      className="text-xs bg-transparent focus:outline-none font-bold text-primary truncate w-full cursor-pointer hover:underline"
-                      value={selectedClipsForChannel[channelIdx.toString()] || ''}
-                      onChange={(e) => {
-                        setSelectedClipsForChannel(prev => ({
-                          ...prev,
-                          [channelIdx.toString()]: e.target.value
-                        }));
-                      }}
-                    >
-                      <option value="">Select Sound...</option>
-                      {clips.map(clip => (
-                        <option key={clip.id} value={clip.id}>{clip.name}</option>
-                      ))}
-                    </select>
+                    
+                    {/* Color Picker Toggle */}
+                    <div className="flex gap-1 ml-2">
+                       {CHANNEL_COLORS.map(c => (
+                         <button 
+                          key={c.name}
+                          onClick={() => updateChannelSetting(channelIdx, 'color', c.class)}
+                          className={cn(
+                            "w-3 h-3 rounded-full transition-transform hover:scale-125",
+                            c.class,
+                            settings.color === c.class ? "ring-2 ring-offset-2 ring-muted-foreground" : "opacity-40"
+                          )}
+                          title={c.name}
+                         />
+                       ))}
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 px-1">
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-tighter">
-                        <div className="flex items-center gap-1"><Volume2 className="w-2.5 h-2.5" /> Vol</div>
+                  <div className="grid grid-cols-1 gap-4 px-1">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-widest">
+                        <div className="flex items-center gap-1"><Volume2 className="w-2.5 h-2.5" /> Volume</div>
                         <span>{Math.round(settings.volume * 100)}%</span>
                       </div>
                       <Slider 
@@ -331,9 +388,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-1">
-                          <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-tighter">
+                    <div className="grid grid-cols-2 gap-6">
+                       <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-widest">
                             <div className="flex items-center gap-1"><Waves className="w-2.5 h-2.5" /> Pitch</div>
                           </div>
                           <Slider 
@@ -344,8 +401,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                             onValueChange={(val) => updateChannelSetting(channelIdx, 'pitch', val[0] / 50)}
                           />
                        </div>
-                       <div className="space-y-1">
-                          <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-tighter">
+                       <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-widest">
                             <div className="flex items-center gap-1"><MoveHorizontal className="w-2.5 h-2.5" /> Pan</div>
                           </div>
                           <Slider 
@@ -358,9 +415,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                        </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                       <div className="space-y-1">
-                          <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-tighter">
+                    <div className="grid grid-cols-2 gap-6">
+                       <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-widest">
                             <div className="flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Delay</div>
                           </div>
                           <Slider 
@@ -371,8 +428,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                             onValueChange={(val) => updateChannelSetting(channelIdx, 'delay', val[0] / 100)}
                           />
                        </div>
-                       <div className="space-y-1">
-                          <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-tighter">
+                       <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-widest">
                             <div className="flex items-center gap-1"><Filter className="w-2.5 h-2.5" /> Cutoff</div>
                           </div>
                           <Slider 
@@ -389,45 +446,46 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="absolute -left-10 top-2 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive h-6 w-6"
+                    className="absolute -left-12 top-2 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive h-8 w-8 rounded-full"
                     onClick={() => removeChannel(channelIdx)}
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
 
                 {/* Step Sequencer */}
-                <div className="flex-1 grid grid-cols-16 gap-2 h-32 pt-1">
-                  {Array.from({ length: STEPS }).map((_, stepIdx) => {
+                <div className="flex-1 flex gap-2 h-36 pt-1">
+                  {Array.from({ length: numSteps }).map((_, stepIdx) => {
                     const clipIds = grid[`${channelIdx}-${stepIdx}`] || [];
                     const clipId = clipIds[0];
                     const clip = clips.find(c => c.id === clipId);
                     const character = CHARACTER_TYPES.find(ct => ct.id === clip?.characterType);
                     const CharIcon = character?.icon;
+                    const isMajorBeat = stepIdx % 4 === 0;
                     
                     return (
                       <button
                         key={stepIdx}
                         onClick={() => toggleCell(channelIdx, stepIdx)}
                         className={cn(
-                          "rounded-2xl transition-all flex items-center justify-center relative overflow-hidden group/cell",
+                          "w-10 rounded-2xl transition-all flex items-center justify-center relative overflow-hidden group/cell shrink-0",
                           stepIdx === currentStep ? "ring-4 ring-accent ring-offset-2 z-10" : "",
                           clip 
-                            ? "bg-primary text-white scale-100 shadow-lg border-b-8 border-primary/50 translate-y-[-2px]" 
+                            ? `${settings.color} text-white scale-100 shadow-lg border-b-8 border-black/20 translate-y-[-2px]` 
                             : "bg-muted/30 hover:bg-muted/50 scale-95",
-                          stepIdx % 4 === 0 && !clip ? "bg-muted/50" : ""
+                          isMajorBeat && !clip ? "bg-muted/60" : ""
                         )}
                       >
                         {CharIcon && (
                           <CharIcon 
                             className={cn(
-                              "w-12 h-12 opacity-90 transition-transform group-hover/cell:scale-110", 
+                              "w-8 h-8 opacity-95 transition-transform group-hover/cell:scale-125", 
                               stepIdx === currentStep ? "animate-bounce" : "animate-bounce-subtle"
                             )} 
                           />
                         )}
                         {stepIdx === currentStep && !clip && (
-                          <div className="absolute inset-0 bg-accent/20" />
+                          <div className="absolute inset-0 bg-accent/30" />
                         )}
                       </button>
                     );
@@ -439,23 +497,27 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
           <Button 
             variant="outline" 
-            className="w-full border-dashed border-2 py-8 rounded-2xl gap-2 hover:bg-primary/5 hover:border-primary transition-all group"
+            className="w-full border-dashed border-4 py-10 rounded-3xl gap-3 hover:bg-primary/5 hover:border-primary transition-all group"
             onClick={addChannel}
           >
-            <Plus className="w-5 h-5 group-hover:scale-125 transition-transform" />
-            <span className="font-bold uppercase tracking-widest text-xs">Add Instrument Track</span>
+            <Plus className="w-6 h-6 group-hover:scale-150 transition-transform text-primary" />
+            <span className="font-black uppercase tracking-[0.3em] text-xs text-primary">Add Instrument Track</span>
           </Button>
         </div>
         
-        <div className="mt-12 flex flex-wrap justify-center gap-12 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">
+        {/* Legend */}
+        <div className="mt-16 flex flex-wrap justify-center gap-12 text-[10px] font-black text-muted-foreground/60 uppercase tracking-[0.2em]">
            <div className="flex items-center gap-2">
-             <div className="w-4 h-4 rounded-md bg-primary shadow-sm" /> Active Step
+             <div className="w-4 h-4 rounded-md bg-muted/80 shadow-inner" /> Major Beat (1/4)
            </div>
            <div className="flex items-center gap-2">
-             <div className="w-4 h-4 rounded-md bg-muted/60 shadow-inner" /> Major Beat
+             <div className="w-4 h-4 rounded-md ring-2 ring-accent ring-offset-2 bg-white" /> Playhead Position
            </div>
            <div className="flex items-center gap-2">
-             <div className="w-4 h-4 rounded-md ring-2 ring-accent ring-offset-2" /> Playhead
+             <Palette className="w-3.5 h-3.5" /> Custom Track Colors
+           </div>
+           <div className="flex items-center gap-2">
+             <Settings2 className="w-3.5 h-3.5" /> Length: {numSteps} Steps
            </div>
         </div>
       </div>
