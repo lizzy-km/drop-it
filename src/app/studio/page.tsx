@@ -13,6 +13,7 @@ import { CHARACTER_TYPES } from '@/components/character-icons';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { Label } from '@/components/ui/label';
 
 export default function StudioPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -43,7 +44,6 @@ export default function StudioPage() {
     if (clip) {
       const updatedClips = clips.map(c => c.id === id ? { ...c, name, characterType } : c);
       // We need a proper db method, for now let's just rewrite the clips array
-      // In a real app we'd have db.updateClip
       const allClips = db.getClips();
       const newAllClips = allClips.map(c => c.id === id ? { ...c, name, characterType } : c);
       localStorage.setItem('dropit_clips', JSON.stringify(newAllClips));
