@@ -9,26 +9,34 @@ Welcome to the **Drop It** codebase! This is a high-performance, minimalist DAW 
 - **Audio Engine:** Web Audio API (Native Browser Audio)
 - **Database:** LocalStorage (Client-side persistence)
 
-## 🏗️ How it Works (The Teenager's Guide)
+## 🏗️ Technical Architecture (Deep Dive)
 
-### 1. The UI (React)
-Everything you see—the sliders, the glowing grid, the dancing monsters—is built with **React**. It handles the "state," which is just a fancy way of saying it remembers which buttons you've clicked and how high your volume is set.
+### 1. Persistence Layer (`src/lib/db.ts`)
+The application uses a "Mock-DB" pattern leveraging `localStorage`.
+- **Base64 Storage:** Audio clips are stored as Data URIs. This allows for offline-first audio persistence without complex cloud storage.
+- **Relational Mapping:** Tracks reference Clip IDs, which are resolved during the studio session.
 
-### 2. The Sound Engine (Web Audio API)
-This isn't just a simple music player. Inside `src/components/studio/rhythm-grid.tsx`, we build an **Audio Graph**. When a sound plays, it's routed through a chain:
-`Sample` -> `Pitch Shifter` -> `Low-pass Filter` -> `Volume Knob` -> `Stereo Panner` -> `Your Speakers`.
+### 2. The Sound Engine (`src/components/studio/rhythm-grid.tsx`)
+The engine is built on the **Web Audio API** node-graph architecture.
 
-### 3. The Sequencer
-The grid is a 16-to-64 step loop. We use a high-precision `setInterval` that tracks the "current step" based on the BPM. If a box is checked, the engine triggers the audio chain for that specific track.
+#### Key Functions:
+- `initAudioContext()`: Safely initializes the `AudioContext` after a user gesture to bypass browser autoplay restrictions.
+- `loadAudio(clip)`: Decodes Base64 strings into `AudioBuffers`. These are kept in `audioBuffersRef` to prevent redundant decoding and ensure zero-latency triggering.
+- `playClip(clipId, channelSettings)`: Dynamically constructs an audio routing graph:
+  `BufferSourceNode` -> `BiquadFilterNode` (Low-pass) -> `GainNode` (Volume) -> `StereoPannerNode` -> `AudioDestination`.
+- `exportToAudio()`: Uses `OfflineAudioContext` for high-speed, non-real-time rendering. It iterates through the sequencer grid, schedules all `BufferSourceNodes`, and encodes the result into a 16-bit PCM `.wav` file.
 
-### 4. Saving & Loading
-We use `localStorage` to keep your beats safe. When you save, we turn your grid and mixer settings into a JSON object and store it in your browser's "junk drawer" (local storage).
+### 3. The Sequencer Loop
+The timing is handled by a standard `setInterval` loop. While `setInterval` can drift, we mitigate this by calculating the `stepDuration` based on the project BPM: `(60 / BPM) / 4`. Every tick triggers the `playClip` function for any active cells in the current step index.
 
-### 5. Exporting
-The **Export to Audio** feature uses an `OfflineAudioContext`. It basically "re-records" your entire beat in the background at 10x speed, mixes all the channels down, and spits out a `.wav` file you can share.
+### 4. Audio Capture (`src/components/studio/voice-recorder.tsx`)
+Uses the `MediaRecorder` API. 
+- **Workflow:** `Stream` -> `Blob` -> `ArrayBuffer` -> `Base64`.
+- Recorded audio is immediately available for the sequencer once the user "commits" the recording.
 
 ## 🛠️ Getting Started
 1. Create a profile on the landing page.
 2. Record a sound or upload a sample.
 3. Click the grid to start making a beat!
 4. Open the **Mixer** (sliders icon) to tweak the vibe.
+5. Hit the **Download** icon to export your masterpiece as a WAV.
