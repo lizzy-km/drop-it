@@ -1,83 +1,196 @@
+
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { db, User, Track } from '@/lib/db';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { db, User, Track, AudioClip } from '@/lib/db';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Heart, Play, User as UserIcon, Calendar, Music } from 'lucide-react';
+import { ChevronLeft, Heart, Play, User as UserIcon, Calendar, Music, Square, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { CHARACTER_TYPES } from '@/components/character-icons';
+import { toast } from '@/hooks/use-toast';
 
 export default function BrowsePage() {
   const [creations, setCreations] = useState<any[]>([]);
+  const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<string | null>(null);
+  
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioBuffersRef = useRef<Record<string, AudioBuffer>>({});
 
   useEffect(() => {
     setCreations(db.getAllCreations());
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, []);
+
+  const initAudioContext = () => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    return audioContextRef.current;
+  };
+
+  const loadAudio = async (clip: AudioClip) => {
+    if (audioBuffersRef.current[clip.id]) return audioBuffersRef.current[clip.id];
+    const ctx = initAudioContext();
+    try {
+      const res = await fetch(clip.audioData);
+      const arrayBuffer = await res.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      audioBuffersRef.current[clip.id] = audioBuffer;
+      return audioBuffer;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const playClip = (clipId: string, track: Track, ctx: AudioContext) => {
+    const buffer = audioBuffersRef.current[clipId];
+    if (!buffer) return;
+
+    const source = ctx.createBufferSource();
+    const gainNode = ctx.createGain();
+    
+    // Find channel settings for this clip in the track
+    let volume = 0.8;
+    Object.keys(track.selectedClips).forEach(chIdx => {
+      if (track.selectedClips[chIdx] === clipId) {
+        volume = track.channelSettings[chIdx]?.volume ?? 0.8;
+      }
+    });
+
+    source.buffer = buffer;
+    gainNode.gain.value = volume;
+    source.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    source.start(0);
+  };
+
+  const stopPlayback = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setPlayingTrackId(null);
+  };
+
+  const handlePlayPreview = async (track: Track) => {
+    if (playingTrackId === track.id) {
+      stopPlayback();
+      return;
+    }
+
+    stopPlayback();
+    setIsLoading(track.id);
+
+    try {
+      const ctx = initAudioContext();
+      if (ctx.state === 'suspended') await ctx.resume();
+
+      // Get all clips needed for this track
+      const allClips = db.getClips();
+      const usedClipIds = new Set(Object.values(track.grid).flat());
+      const requiredClips = allClips.filter(c => usedClipIds.has(c.id));
+
+      await Promise.all(requiredClips.map(clip => loadAudio(clip)));
+
+      setIsLoading(null);
+      setPlayingTrackId(track.id);
+
+      let currentStep = 0;
+      const stepInterval = (60 / track.bpm) / 4 * 1000;
+
+      timerRef.current = setInterval(() => {
+        for (let ch = 0; ch < track.numChannels; ch++) {
+          const clipIds = track.grid[`${ch}-${currentStep}`];
+          if (clipIds) {
+            clipIds.forEach(id => playClip(id, track, ctx));
+          }
+        }
+        currentStep = (currentStep + 1) % track.numSteps;
+      }, stepInterval);
+
+    } catch (err) {
+      setIsLoading(null);
+      toast({ title: "Playback Error", variant: "destructive" });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="bg-card border-b px-6 py-6 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <header className="bg-card border-b px-10 py-6 sticky top-0 z-50 gold-border">
+        <div className="max-w-[1600px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-6">
             <Link href="/">
-              <Button variant="ghost" size="icon" className="rounded-full text-foreground hover:bg-muted">
+              <Button variant="ghost" size="icon" className="rounded-2xl text-foreground hover:bg-muted">
                 <ChevronLeft className="w-6 h-6" />
               </Button>
             </Link>
-            <h1 className="text-3xl font-black tracking-tighter text-primary">COMMUNITY DROPS</h1>
+            <h1 className="text-4xl font-black tracking-tighter text-primary italic uppercase">Community_Hub</h1>
           </div>
           <Link href="/studio">
-             <Button className="rounded-full bg-accent hover:bg-accent/90 px-6 font-bold text-accent-foreground">
-               Go to Studio
+             <Button className="rounded-full bg-primary hover:bg-primary/90 px-8 h-12 font-black text-black uppercase tracking-widest text-xs">
+               Enter Studio
              </Button>
           </Link>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+      <main className="max-w-[1600px] mx-auto px-10 py-16">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-10">
           {creations.length === 0 ? (
-            <div className="col-span-full py-24 text-center">
-              <Music className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-muted-foreground">No drops yet.</h2>
-              <p className="text-muted-foreground mt-2">Be the first to record a sound and arrange a beat!</p>
+            <div className="col-span-full py-32 text-center glass-panel rounded-[3rem] border-dashed border-2">
+              <Music className="w-20 h-20 text-primary/20 mx-auto mb-6" />
+              <h2 className="text-3xl font-black text-muted-foreground uppercase tracking-tighter">No drops detected.</h2>
+              <p className="text-muted-foreground mt-4 font-bold">Be the first to record a sound and arrange a beat!</p>
             </div>
           ) : (
             creations.map((track) => (
-              <div key={track.id} className="bg-card rounded-[2.5rem] overflow-hidden shadow-xl border-t-8 border-primary hover:scale-[1.02] transition-transform duration-300">
-                <div className="p-8 space-y-6">
+              <div key={track.id} className="bg-card rounded-[3rem] overflow-hidden shadow-2xl border border-primary/20 hover:border-primary/50 transition-all duration-500 group gold-shadow">
+                <div className="p-10 space-y-8">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <img src={track.user?.avatar || 'https://picsum.photos/seed/default/200'} className="w-12 h-12 rounded-2xl object-cover" alt="" />
+                    <div className="flex items-center gap-4">
+                      <div className="relative">
+                        <img src={track.user?.avatar || 'https://picsum.photos/seed/default/200'} className="w-14 h-14 rounded-2xl object-cover ring-2 ring-primary/20" alt="" />
+                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full border-2 border-card" />
+                      </div>
                       <div>
-                        <h3 className="font-bold text-lg leading-none">{track.title}</h3>
-                        <span className="text-xs font-bold text-primary">{track.user?.name}</span>
+                        <h3 className="font-black text-xl leading-none text-primary italic tracking-tight uppercase truncate max-w-[180px]">{track.title}</h3>
+                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mt-1 block">@{track.user?.name.replace(/\s+/g, '_').toLowerCase()}</span>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="rounded-full text-accent hover:bg-accent/10">
-                      <Heart className="w-6 h-6" />
+                    <Button variant="ghost" size="icon" className="rounded-full text-primary hover:bg-primary/10">
+                      <Heart className="w-5 h-5" />
                     </Button>
                   </div>
 
-                  <div className="bg-muted/20 rounded-3xl p-6 relative group overflow-hidden h-32 flex items-center justify-center">
-                     <div className="absolute inset-0 pixel-grid opacity-20" />
-                     <div className="flex gap-2 relative z-10">
-                        {Object.values(CHARACTER_TYPES).slice(0, 3).map((ct, i) => (
-                          <ct.icon key={i} className={`w-12 h-12 ${ct.color} animate-bounce-subtle`} style={{ animationDelay: `${i * 0.2}s` }} />
+                  <div className="bg-black/40 rounded-[2.5rem] p-10 relative group/visualizer overflow-hidden h-40 flex items-center justify-center border border-white/5 shadow-inner">
+                     <div className="absolute inset-0 studio-grid-bg opacity-10" />
+                     <div className="flex gap-4 relative z-10">
+                        {CHARACTER_TYPES.slice(0, 3).map((ct, i) => (
+                          <ct.icon key={i} className={`w-14 h-14 ${ct.color} animate-bounce-subtle`} style={{ animationDelay: `${i * 0.2}s` }} />
                         ))}
                      </div>
-                     <button className="absolute inset-0 bg-primary/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center z-20">
-                        <Play className="w-12 h-12 text-white fill-white" />
+                     <button 
+                        onClick={() => handlePlayPreview(track)}
+                        className="absolute inset-0 bg-primary/20 backdrop-blur-sm opacity-0 group-hover/visualizer:opacity-100 transition-all flex items-center justify-center z-20 cursor-pointer"
+                     >
+                        {isLoading === track.id ? (
+                          <Loader2 className="w-14 h-14 text-white animate-spin" />
+                        ) : playingTrackId === track.id ? (
+                          <Square className="w-14 h-14 text-white fill-white" />
+                        ) : (
+                          <Play className="w-14 h-14 text-white fill-white" />
+                        )}
                      </button>
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] font-black text-muted-foreground uppercase tracking-widest pt-2">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5" />
+                  <div className="flex items-center justify-between text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] pt-4 border-t border-white/5">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-3.5 h-3.5 text-primary/60" />
                       {new Date(track.createdAt).toLocaleDateString()}
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <Music className="w-3.5 h-3.5" />
+                    <div className="flex items-center gap-2">
+                      <Music className="w-3.5 h-3.5 text-primary/60" />
                       {track.bpm} BPM
                     </div>
                   </div>
