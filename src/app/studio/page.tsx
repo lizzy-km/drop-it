@@ -7,8 +7,8 @@ import { VoiceRecorder } from '@/components/studio/voice-recorder';
 import { AudioUploader } from '@/components/studio/audio-uploader';
 import { RhythmGrid } from '@/components/studio/rhythm-grid';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Library, Trash2, LayoutDashboard, Zap, Settings2 } from 'lucide-react';
-import Link from 'next/link';
+import { ChevronLeft, Library, Trash2, LayoutDashboard, Zap, Settings2, Loader2 } from 'lucide-react';
+import ReactLink from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
@@ -62,11 +62,11 @@ function StudioContent() {
     <div className="min-h-screen bg-background text-foreground pb-24 studio-grid-bg">
       <header className="glass-panel border-b border-primary/20 px-10 py-5 flex items-center justify-between sticky top-0 z-[100]">
         <div className="flex items-center gap-10">
-          <Link href="/">
+          <ReactLink href="/">
             <Button variant="ghost" size="icon" className="rounded-2xl text-muted-foreground hover:text-primary hover:bg-primary/10">
               <ChevronLeft className="w-6 h-6" />
             </Button>
-          </Link>
+          </ReactLink>
           <div className="flex items-center gap-5">
             <div className="relative">
               <img src={user.avatar} className="w-14 h-14 rounded-2xl object-cover ring-2 ring-primary/30" alt="" />
@@ -85,11 +85,11 @@ function StudioContent() {
         </div>
 
         <div className="flex items-center gap-4">
-          <Link href="/browse">
+          <ReactLink href="/browse">
              <Button variant="outline" className="rounded-full font-black px-8 h-12 border-primary/20 bg-black/20 hover:bg-primary/5 uppercase tracking-widest text-xs">
                Community Hub
              </Button>
-          </Link>
+          </ReactLink>
         </div>
       </header>
 

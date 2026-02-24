@@ -27,6 +27,7 @@ export default function BrowsePage() {
     setCurrentUser(db.getCurrentUser());
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (audioContextRef.current) audioContextRef.current.close();
     };
   }, []);
 
@@ -58,18 +59,31 @@ export default function BrowsePage() {
 
     const source = ctx.createBufferSource();
     const gainNode = ctx.createGain();
+    const filterNode = ctx.createBiquadFilter();
     
-    // Find channel settings for this clip in the track
+    // Find settings for this channel
     let volume = 0.8;
+    let pitch = 1.0;
+    let cutoff = 1.0;
+    
     Object.keys(track.selectedClips).forEach(chIdx => {
       if (track.selectedClips[chIdx] === clipId) {
-        volume = track.channelSettings[chIdx]?.volume ?? 0.8;
+        const settings = track.channelSettings[chIdx];
+        if (settings) {
+          volume = settings.volume ?? 0.8;
+          pitch = settings.pitch ?? 1.0;
+          cutoff = settings.cutoff ?? 1.0;
+        }
       }
     });
 
     source.buffer = buffer;
+    source.playbackRate.value = pitch;
     gainNode.gain.value = volume;
-    source.connect(gainNode);
+    filterNode.frequency.value = 200 + (Math.pow(cutoff, 2) * 19800);
+
+    source.connect(filterNode);
+    filterNode.connect(gainNode);
     gainNode.connect(ctx.destination);
     source.start(0);
   };
@@ -92,8 +106,9 @@ export default function BrowsePage() {
       const ctx = initAudioContext();
       if (ctx.state === 'suspended') await ctx.resume();
 
-      const allClips = db.getClips();
+      // Ensure all clips for this track are loaded
       const usedClipIds = new Set(Object.values(track.grid).flat());
+      const allClips = db.getClips();
       const requiredClips = allClips.filter(c => usedClipIds.has(c.id));
 
       if (requiredClips.length === 0 && usedClipIds.size > 0) {
@@ -106,7 +121,8 @@ export default function BrowsePage() {
       setPlayingTrackId(track.id);
 
       let currentStep = 0;
-      const stepInterval = (60 / track.bpm) / 4 * 1000;
+      const stepDuration = (60 / track.bpm) / 4;
+      const stepInterval = stepDuration * 1000;
 
       timerRef.current = setInterval(() => {
         for (let ch = 0; ch < track.numChannels; ch++) {
@@ -121,7 +137,7 @@ export default function BrowsePage() {
     } catch (err) {
       console.error(err);
       setIsLoading(null);
-      toast({ title: "Playback Error", description: "Could not load studio assets.", variant: "destructive" });
+      toast({ title: "Playback Error", description: "Audio context could not start or assets missing.", variant: "destructive" });
     }
   };
 
