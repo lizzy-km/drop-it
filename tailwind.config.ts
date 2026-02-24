@@ -15,6 +15,9 @@ export default {
         headline: ['Poppins', 'sans-serif'],
         code: ['monospace'],
       },
+      gridTemplateColumns: {
+        '16': 'repeat(16, minmax(0, 1fr))',
+      },
       colors: {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',

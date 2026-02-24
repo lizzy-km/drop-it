@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Plus, Trash2, Layers, Music } from 'lucide-react';
+import { Play, Square, Music, Save } from 'lucide-react';
 import { db, User, AudioClip, Track } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
@@ -58,13 +58,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     if (!clip) return;
 
     try {
-      const buffer = await loadAudio(clip);
       const ctx = initAudioContext();
-      
       if (ctx.state === 'suspended') {
         await ctx.resume();
       }
 
+      const buffer = await loadAudio(clip);
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       source.connect(ctx.destination);
@@ -77,18 +76,21 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const toggleCell = async (channel: number, step: number) => {
     const clipId = selectedClipsForChannel[channel];
     if (!clipId) {
-      toast({ title: "Select a clip for this channel first!" });
+      toast({ title: "Select a sound for this channel first!" });
       return;
     }
 
     const key = `${channel}-${step}`;
     const newGrid = { ...grid };
+    
     if (newGrid[key]?.includes(clipId)) {
       newGrid[key] = newGrid[key].filter(id => id !== clipId);
       if (newGrid[key].length === 0) delete newGrid[key];
     } else {
       newGrid[key] = [...(newGrid[key] || []), clipId];
-      // Preview sound when placing
+      // Resume context on interaction and play preview
+      const ctx = initAudioContext();
+      if (ctx.state === 'suspended') await ctx.resume();
       await playClip(clipId);
     }
     setGrid(newGrid);
@@ -152,7 +154,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
           <input 
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="text-xl font-bold bg-transparent border-none focus:ring-0 w-full md:w-auto"
+            className="text-xl font-bold bg-transparent border-none focus:ring-0 w-full md:w-auto outline-none"
             placeholder="Untitled Drop..."
           />
           <div className="flex items-center gap-2 bg-muted px-3 py-1.5 rounded-full text-xs font-bold">
@@ -163,7 +165,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               max="200" 
               value={bpm} 
               onChange={(e) => setBpm(parseInt(e.target.value))}
-              className="w-24 accent-primary"
+              className="w-24 accent-primary cursor-pointer"
             />
           </div>
         </div>
@@ -178,7 +180,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
             {isPlaying ? "Stop" : "Play Beat"}
           </Button>
           <Button variant="outline" className="rounded-full" onClick={saveCurrentTrack}>
-             Save Creation
+             <Save className="w-4 h-4 mr-2" /> Save Creation
           </Button>
         </div>
       </div>
@@ -187,12 +189,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         <div className="min-w-[800px] space-y-4">
           {Array.from({ length: CHANNELS }).map((_, channelIdx) => (
             <div key={channelIdx} className="flex items-center gap-4">
-              <div className="w-48 flex items-center gap-3 pr-2 border-r">
+              <div className="w-48 flex items-center gap-3 pr-2 border-r shrink-0">
                 <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0">
                   <Music className="w-5 h-5 text-muted-foreground" />
                 </div>
                 <select 
-                  className="text-xs bg-transparent focus:outline-none font-semibold text-primary truncate w-full"
+                  className="text-xs bg-transparent focus:outline-none font-semibold text-primary truncate w-full cursor-pointer"
                   value={selectedClipsForChannel[channelIdx]}
                   onChange={(e) => {
                     const newArr = [...selectedClipsForChannel];
@@ -200,7 +202,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                     setSelectedClipsForChannel(newArr);
                   }}
                 >
-                  <option value="">Choose Sound...</option>
+                  <option value="">Select Sound...</option>
                   {clips.map(clip => (
                     <option key={clip.id} value={clip.id}>{clip.name}</option>
                   ))}
@@ -212,15 +214,16 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                   const clipIds = grid[`${channelIdx}-${stepIdx}`] || [];
                   const clipId = clipIds[0];
                   const clip = clips.find(c => c.id === clipId);
-                  const CharIcon = CHARACTER_TYPES.find(ct => ct.id === clip?.characterType)?.icon;
+                  const character = CHARACTER_TYPES.find(ct => ct.id === clip?.characterType);
+                  const CharIcon = character?.icon;
                   
                   return (
                     <button
                       key={stepIdx}
                       onClick={() => toggleCell(channelIdx, stepIdx)}
                       className={cn(
-                        "rounded-lg transition-all flex items-center justify-center relative overflow-hidden",
-                        stepIdx === currentStep ? "ring-2 ring-accent ring-offset-2" : "",
+                        "rounded-lg transition-all flex items-center justify-center relative overflow-hidden h-full",
+                        stepIdx === currentStep ? "ring-2 ring-accent ring-offset-2 z-10" : "",
                         clip 
                           ? "bg-primary text-white scale-100 shadow-sm" 
                           : "bg-muted/30 hover:bg-muted scale-95",
@@ -248,7 +251,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         
         <div className="mt-8 flex justify-center gap-12 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
            <div className="flex items-center gap-2">
-             <div className="w-3 h-3 rounded bg-primary" /> Active Clip
+             <div className="w-3 h-3 rounded bg-primary" /> Active Sound
            </div>
            <div className="flex items-center gap-2">
              <div className="w-3 h-3 rounded bg-muted/60" /> Beat Highlight
