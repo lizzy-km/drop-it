@@ -16,12 +16,18 @@ export interface AudioClip {
   createdAt: number;
 }
 
+export interface ChannelSettings {
+  volume: number;
+  pitch: number;
+}
+
 export interface Track {
   id: string;
   userId: string;
   title: string;
   bpm: number;
   grid: Record<string, string[]>; // e.g., { "0-0": ["clipId1"], "1-4": ["clipId2"] }
+  channelSettings?: Record<string, ChannelSettings>;
   createdAt: number;
 }
 
