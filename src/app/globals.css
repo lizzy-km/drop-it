@@ -4,26 +4,26 @@
 
 @layer base {
   :root {
-    --background: 20 20% 4%;
-    --foreground: 45 100% 98%;
-    --card: 20 20% 7%;
-    --card-foreground: 45 100% 98%;
-    --popover: 20 20% 7%;
-    --popover-foreground: 45 100% 98%;
-    --primary: 47 100% 45%;
-    --primary-foreground: 20 20% 4%;
-    --secondary: 20 20% 12%;
-    --secondary-foreground: 45 100% 98%;
-    --muted: 20 20% 12%;
-    --muted-foreground: 45 20% 60%;
-    --accent: 38 92% 50%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84.2% 60.2%;
+    --background: 0 0% 4%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 48 100% 50%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 48 100% 50%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 20 20% 15%;
-    --input: 20 20% 15%;
-    --ring: 47 100% 45%;
-    --radius: 1.25rem;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 48 100% 50%;
+    --radius: 1.5rem;
   }
 }
 
@@ -37,30 +37,35 @@
   }
 }
 
-.pixel-grid {
-  background-image: radial-gradient(circle, hsl(var(--primary) / 0.1) 1px, transparent 1px);
-  background-size: 20px 20px;
+.studio-grid-bg {
+  background-image: 
+    linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--border) / 0.5) 1px, transparent 1px);
+  background-size: 40px 40px;
 }
 
 @keyframes bounce-subtle {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
+  50% { transform: translateY(-4px); }
 }
 
 .animate-bounce-subtle {
   animation: bounce-subtle 2s infinite ease-in-out;
 }
 
-/* Custom scrollbar for dark yellow theme */
+.glass-panel {
+  @apply bg-card/80 backdrop-blur-xl border border-white/5 shadow-2xl;
+}
+
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-background;
+  @apply bg-transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-primary/20 rounded-full hover:bg-primary/40 transition-colors;
+  @apply bg-white/10 rounded-full hover:bg-primary/50 transition-colors;
 }

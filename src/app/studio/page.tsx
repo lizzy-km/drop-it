@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { db, User, AudioClip, Track } from '@/lib/db';
+import { db, User, AudioClip } from '@/lib/db';
 import { VoiceRecorder } from '@/components/studio/voice-recorder';
 import { AudioUploader } from '@/components/studio/audio-uploader';
 import { RhythmGrid } from '@/components/studio/rhythm-grid';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Music2, Share2, Library, Trash2 } from 'lucide-react';
+import { ChevronLeft, Disc, Library, Trash2, LayoutDashboard } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CHARACTER_TYPES } from '@/components/character-icons';
@@ -38,76 +38,79 @@ export default function StudioPage() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      {/* Header */}
-      <header className="bg-card border-b px-6 py-4 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-black text-foreground pb-20 studio-grid-bg">
+      {/* Top Navigation */}
+      <header className="glass-panel border-b border-white/5 px-8 py-4 flex items-center justify-between sticky top-0 z-[100]">
+        <div className="flex items-center gap-8">
           <Link href="/">
-            <Button variant="ghost" size="icon" className="rounded-full text-foreground hover:bg-muted">
+            <Button variant="ghost" size="icon" className="rounded-full text-muted-foreground hover:text-white hover:bg-white/10">
               <ChevronLeft className="w-6 h-6" />
             </Button>
           </Link>
-          <div className="flex items-center gap-3">
-            <img src={user.avatar} className="w-10 h-10 rounded-xl object-cover" alt="" />
+          <div className="flex items-center gap-4">
+            <img src={user.avatar} className="w-12 h-12 rounded-2xl object-cover ring-2 ring-white/10" alt="" />
             <div>
-              <h2 className="font-bold leading-none">{user.name}</h2>
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Studio Session</span>
+              <h2 className="text-xl font-black tracking-tight leading-none">{user.name.toUpperCase()}</h2>
+              <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Studio Live</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           <Link href="/browse">
-            <Button variant="ghost" className="rounded-full font-bold gap-2 text-primary hover:bg-primary/10">
-              <Share2 className="w-4 h-4" /> Discover
-            </Button>
+             <Button variant="outline" className="rounded-full font-bold px-6 border-white/10 bg-transparent hover:bg-white/5">
+               Explore Drops
+             </Button>
           </Link>
         </div>
       </header>
 
-      <main className="w-[95%] mx-auto px-6 py-8 space-y-8">
-        {/* Top Controls: Sequencer Area */}
-        <section>
+      <main className="max-w-[1600px] mx-auto px-8 py-10 space-y-12">
+        {/* Main Sequencer Hero Section */}
+        <section className="animate-in fade-in zoom-in-95 duration-700">
           <RhythmGrid user={user} clips={clips} onSaveTrack={() => {}} />
         </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Audio Assets Panel */}
-          <div className="lg:col-span-8 space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          {/* Recording & Assets */}
+          <div className="lg:col-span-8 space-y-10">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <VoiceRecorder user={user} onClipSaved={refreshClips} />
               <AudioUploader user={user} onClipSaved={refreshClips} />
             </div>
 
-            <div className="bg-card rounded-2xl p-6 shadow-sm border">
-               <div className="flex items-center justify-between mb-4">
-                 <h3 className="font-semibold text-lg flex items-center gap-2">
-                   <Library className="w-5 h-5 text-accent" /> Sound Library
+            {/* Compact Library View */}
+            <div className="glass-panel rounded-[2.5rem] p-10 border-white/5">
+               <div className="flex items-center justify-between mb-8">
+                 <h3 className="text-2xl font-black flex items-center gap-3">
+                   <Library className="w-6 h-6 text-primary" /> SOUND ASSETS
                  </h3>
-                 <span className="text-xs font-bold text-muted-foreground uppercase">{clips.length} Sounds</span>
+                 <span className="px-3 py-1 rounded-full bg-white/5 text-[10px] font-black text-muted-foreground tracking-widest uppercase">
+                   {clips.length} Clips Loaded
+                 </span>
                </div>
 
-               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
                  {clips.length === 0 ? (
-                    <div className="col-span-full py-12 text-center text-muted-foreground font-medium border-2 border-dashed rounded-xl">
-                       No sounds recorded yet. Use the panels above to start!
+                    <div className="col-span-full py-16 text-center text-muted-foreground font-bold border-2 border-dashed border-white/5 rounded-3xl">
+                       No assets found. Start recording!
                     </div>
                  ) : (
                    clips.map(clip => {
-                     const CharIcon = CHARACTER_TYPES.find(ct => ct.id === clip.characterType)?.icon || Music2;
+                     const CharIcon = CHARACTER_TYPES.find(ct => ct.id === clip.characterType)?.icon || Disc;
                      return (
-                       <div key={clip.id} className="group relative bg-muted/30 p-4 rounded-xl border flex flex-col items-center gap-2 hover:bg-muted/50 transition-colors">
-                          <div className="w-12 h-12 bg-background rounded-lg flex items-center justify-center shadow-sm">
+                       <div key={clip.id} className="group relative bg-white/5 p-4 rounded-2xl hover:bg-white/10 transition-all border border-transparent hover:border-primary/20 flex flex-col items-center gap-3">
+                          <div className="w-14 h-14 bg-black rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
                              <CharIcon className="w-8 h-8 text-primary" />
                           </div>
-                          <span className="text-xs font-bold truncate w-full text-center">{clip.name}</span>
+                          <span className="text-[10px] font-black uppercase tracking-widest text-center truncate w-full">{clip.name}</span>
                           <Button 
                             variant="destructive" 
                             size="icon" 
-                            className="absolute -top-2 -right-2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute -top-2 -right-2 h-7 w-7 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-xl"
                             onClick={() => deleteClip(clip.id)}
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </Button>
                        </div>
                      );
@@ -117,19 +120,44 @@ export default function StudioPage() {
             </div>
           </div>
 
-          {/* Tips Panel */}
-          <div className="lg:col-span-4 space-y-6">
-             <div className="bg-primary text-primary-foreground rounded-2xl p-6 shadow-lg relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-10">
-                  <Music2 className="w-32 h-32" />
+          {/* Side Info/Stats */}
+          <div className="lg:col-span-4 space-y-8">
+             <div className="bg-primary p-8 rounded-[2.5rem] text-black relative overflow-hidden group shadow-2xl">
+                <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:rotate-12 transition-transform duration-700">
+                  <Disc className="w-48 h-48" />
                 </div>
-                <h3 className="text-xl font-bold mb-4 relative z-10">Pro Tip</h3>
-                <ul className="space-y-4 relative z-10 text-sm font-medium text-primary-foreground/90">
-                  <li>• Pick a sound for each channel in the grid.</li>
-                  <li>• Toggle cells to arrange your rhythm.</li>
-                  <li>• Each sound has its own animated character!</li>
-                  <li>• Save your creation and share it with the world.</li>
-                </ul>
+                <h3 className="text-3xl font-black italic mb-6">PRO WORKFLOW</h3>
+                <div className="space-y-6 font-bold text-sm">
+                  <div className="flex gap-4 items-start">
+                    <div className="w-6 h-6 rounded-full bg-black/10 flex items-center justify-center text-xs shrink-0">1</div>
+                    <p>Map your custom vocal recordings to any of the instrument tracks.</p>
+                  </div>
+                  <div className="flex gap-4 items-start">
+                    <div className="w-6 h-6 rounded-full bg-black/10 flex items-center justify-center text-xs shrink-0">2</div>
+                    <p>Use the Mixer to sculpt each sound with Volume, Pitch, and Reverb.</p>
+                  </div>
+                  <div className="flex gap-4 items-start">
+                    <div className="w-6 h-6 rounded-full bg-black/10 flex items-center justify-center text-xs shrink-0">3</div>
+                    <p>Extend the sequence up to 64 steps for complex musical phrases.</p>
+                  </div>
+                </div>
+             </div>
+
+             <div className="glass-panel p-8 rounded-[2.5rem] space-y-4">
+                <div className="flex items-center gap-3 text-primary">
+                  <LayoutDashboard className="w-5 h-5" />
+                  <span className="font-black text-xs uppercase tracking-widest">Session Stats</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/5 p-4 rounded-2xl text-center">
+                    <div className="text-2xl font-black">{clips.length}</div>
+                    <div className="text-[8px] font-black uppercase text-muted-foreground">Assets</div>
+                  </div>
+                  <div className="bg-white/5 p-4 rounded-2xl text-center">
+                    <div className="text-2xl font-black">1</div>
+                    <div className="text-[8px] font-black uppercase text-muted-foreground">Active Project</div>
+                  </div>
+                </div>
              </div>
           </div>
         </div>
