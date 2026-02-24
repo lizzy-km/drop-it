@@ -29,8 +29,10 @@ export interface Track {
   userId: string;
   title: string;
   bpm: number;
+  numChannels: number;
   grid: Record<string, string[]>; // e.g., { "0-0": ["clipId1"], "1-4": ["clipId2"] }
-  channelSettings?: Record<string, ChannelSettings>;
+  channelSettings: Record<string, ChannelSettings>;
+  selectedClips: Record<string, string>; // Maps channel index string to clip ID
   createdAt: number;
 }
 

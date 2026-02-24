@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Music, Save, Volume2, Waves, Clock, MoveHorizontal, Filter } from 'lucide-react';
+import { Play, Square, Music, Save, Volume2, Waves, Clock, MoveHorizontal, Filter, Plus, Trash2 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
@@ -11,7 +11,7 @@ import { toast } from '@/hooks/use-toast';
 import { Slider } from '@/components/ui/slider';
 
 const STEPS = 16;
-const CHANNELS = 4;
+const DEFAULT_CHANNELS = 4;
 
 const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   volume: 0.8,
@@ -30,12 +30,16 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
   const [bpm, setBpm] = useState(track?.bpm || 120);
+  const [numChannels, setNumChannels] = useState(track?.numChannels || DEFAULT_CHANNELS);
   const [grid, setGrid] = useState<Record<string, string[]>>(track?.grid || {});
   const [channelSettings, setChannelSettings] = useState<Record<string, ChannelSettings>>(
     track?.channelSettings || 
-    Object.fromEntries(Array.from({ length: CHANNELS }).map((_, i) => [i.toString(), { ...DEFAULT_CHANNEL_SETTINGS }]))
+    Object.fromEntries(Array.from({ length: DEFAULT_CHANNELS }).map((_, i) => [i.toString(), { ...DEFAULT_CHANNEL_SETTINGS }]))
   );
-  const [selectedClipsForChannel, setSelectedClipsForChannel] = useState<string[]>(new Array(CHANNELS).fill(''));
+  const [selectedClipsForChannel, setSelectedClipsForChannel] = useState<Record<string, string>>(
+    track?.selectedClips || 
+    Object.fromEntries(Array.from({ length: DEFAULT_CHANNELS }).map((_, i) => [i.toString(), '']))
+  );
   const [title, setTitle] = useState(track?.title || 'My First Drop');
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -66,11 +70,11 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     }
   }, [initAudioContext]);
 
-  const playClip = useCallback(async (clipId: string, channelIdx: number) => {
+  const playClip = useCallback(async (clipId: string, channelIdxString: string) => {
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
 
-    const settings = channelSettings[channelIdx.toString()] || DEFAULT_CHANNEL_SETTINGS;
+    const settings = channelSettings[channelIdxString] || DEFAULT_CHANNEL_SETTINGS;
 
     try {
       const ctx = initAudioContext();
@@ -92,19 +96,16 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       panNode.pan.value = settings.pan || 0;
       
       filterNode.type = 'lowpass';
-      // Map 0-1 to 200Hz - 20000Hz exponentially-ish
       filterNode.frequency.value = 200 + (Math.pow(settings.cutoff, 2) * 19800);
 
-      // Audio Chain: source -> filter -> gain -> panner -> destination
       source.connect(filterNode);
       filterNode.connect(gainNode);
       gainNode.connect(panNode);
       panNode.connect(ctx.destination);
 
-      // Wet Path (Delay)
       if (settings.delay > 0) {
-        delayNode.delayTime.value = 0.3; // Fixed delay time for now
-        feedbackNode.gain.value = settings.delay * 0.7; // Feedback mix
+        delayNode.delayTime.value = 0.3; 
+        feedbackNode.gain.value = settings.delay * 0.7; 
         
         gainNode.connect(delayNode);
         delayNode.connect(feedbackNode);
@@ -118,14 +119,14 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     }
   }, [clips, loadAudio, initAudioContext, channelSettings]);
 
-  const toggleCell = async (channel: number, step: number) => {
-    const clipId = selectedClipsForChannel[channel];
+  const toggleCell = async (channelIdx: number, step: number) => {
+    const clipId = selectedClipsForChannel[channelIdx.toString()];
     if (!clipId) {
       toast({ title: "Select a sound for this channel first!" });
       return;
     }
 
-    const key = `${channel}-${step}`;
+    const key = `${channelIdx}-${step}`;
     const newGrid = { ...grid };
     
     if (newGrid[key]?.includes(clipId)) {
@@ -133,7 +134,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       if (newGrid[key].length === 0) delete newGrid[key];
     } else {
       newGrid[key] = [...(newGrid[key] || []), clipId];
-      await playClip(clipId, channel);
+      await playClip(clipId, channelIdx.toString());
     }
     setGrid(newGrid);
   };
@@ -159,10 +160,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       timerRef.current = setInterval(() => {
         setCurrentStep(prev => {
           const next = (prev + 1) % STEPS;
-          for (let c = 0; c < CHANNELS; c++) {
+          for (let c = 0; c < numChannels; c++) {
             const clipIds = grid[`${c}-${next}`];
             if (clipIds) {
-              clipIds.forEach(id => playClip(id, c));
+              clipIds.forEach(id => playClip(id, c.toString()));
             }
           }
           return next;
@@ -172,7 +173,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPlaying, bpm, grid, playClip]);
+  }, [isPlaying, bpm, grid, playClip, numChannels]);
 
   const updateChannelSetting = (channelIdx: number, key: keyof ChannelSettings, value: number) => {
     setChannelSettings(prev => ({
@@ -184,14 +185,62 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     }));
   };
 
+  const addChannel = () => {
+    const newChannelIdx = numChannels;
+    setNumChannels(prev => prev + 1);
+    setChannelSettings(prev => ({
+      ...prev,
+      [newChannelIdx.toString()]: { ...DEFAULT_CHANNEL_SETTINGS }
+    }));
+    setSelectedClipsForChannel(prev => ({
+      ...prev,
+      [newChannelIdx.toString()]: ''
+    }));
+  };
+
+  const removeChannel = (idxToRemove: number) => {
+    if (numChannels <= 1) {
+      toast({ title: "You need at least one channel!" });
+      return;
+    }
+    
+    const newNum = numChannels - 1;
+    setNumChannels(newNum);
+
+    // Filter grid, settings, and selected clips
+    const newGrid: Record<string, string[]> = {};
+    Object.keys(grid).forEach(key => {
+      const [c, s] = key.split('-').map(Number);
+      if (c === idxToRemove) return;
+      const newC = c > idxToRemove ? c - 1 : c;
+      newGrid[`${newC}-${s}`] = grid[key];
+    });
+    setGrid(newGrid);
+
+    const newSettings: Record<string, ChannelSettings> = {};
+    const newSelected: Record<string, string> = {};
+    
+    for (let i = 0; i < numChannels; i++) {
+      if (i === idxToRemove) continue;
+      const targetIdx = i > idxToRemove ? i - 1 : i;
+      newSettings[targetIdx.toString()] = channelSettings[i.toString()] || DEFAULT_CHANNEL_SETTINGS;
+      newSelected[targetIdx.toString()] = selectedClipsForChannel[i.toString()] || '';
+    }
+    
+    setChannelSettings(newSettings);
+    setSelectedClipsForChannel(newSelected);
+  };
+
   const saveCurrentTrack = () => {
     const newTrack: Track = {
       id: track?.id || crypto.randomUUID(),
       userId: user.id,
       title,
       bpm,
+      numChannels,
       grid,
       channelSettings,
+      selectedClips: selectedClipsForChannel,
       createdAt: Date.now()
     };
     db.saveTrack(newTrack);
@@ -239,24 +288,25 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
       <div className="bg-white rounded-3xl p-6 shadow-sm border overflow-x-auto">
         <div className="min-w-[1000px] space-y-8">
-          {Array.from({ length: CHANNELS }).map((_, channelIdx) => {
+          {Array.from({ length: numChannels }).map((_, channelIdx) => {
             const settings = channelSettings[channelIdx.toString()] || DEFAULT_CHANNEL_SETTINGS;
             
             return (
-              <div key={channelIdx} className="flex items-start gap-8">
+              <div key={channelIdx} className="flex items-start gap-8 group">
                 {/* Channel Mixer strip */}
-                <div className="w-72 flex flex-col gap-4 pr-6 border-r shrink-0">
+                <div className="w-72 flex flex-col gap-4 pr-6 border-r shrink-0 relative">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0 shadow-inner">
                       <Music className="w-5 h-5 text-muted-foreground" />
                     </div>
                     <select 
                       className="text-xs bg-transparent focus:outline-none font-bold text-primary truncate w-full cursor-pointer hover:underline"
-                      value={selectedClipsForChannel[channelIdx]}
+                      value={selectedClipsForChannel[channelIdx.toString()] || ''}
                       onChange={(e) => {
-                        const newArr = [...selectedClipsForChannel];
-                        newArr[channelIdx] = e.target.value;
-                        setSelectedClipsForChannel(newArr);
+                        setSelectedClipsForChannel(prev => ({
+                          ...prev,
+                          [channelIdx.toString()]: e.target.value
+                        }));
                       }}
                     >
                       <option value="">Select Sound...</option>
@@ -266,7 +316,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                     </select>
                   </div>
 
-                  {/* FL Studio style FX knobs represented as sliders */}
                   <div className="grid grid-cols-1 gap-3 px-1">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-[10px] uppercase font-black text-muted-foreground/60 tracking-tighter">
@@ -336,6 +385,15 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                        </div>
                     </div>
                   </div>
+
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="absolute -left-10 top-2 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive h-6 w-6"
+                    onClick={() => removeChannel(channelIdx)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
 
                 {/* Step Sequencer */}
@@ -378,6 +436,15 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               </div>
             );
           })}
+
+          <Button 
+            variant="outline" 
+            className="w-full border-dashed border-2 py-8 rounded-2xl gap-2 hover:bg-primary/5 hover:border-primary transition-all group"
+            onClick={addChannel}
+          >
+            <Plus className="w-5 h-5 group-hover:scale-125 transition-transform" />
+            <span className="font-bold uppercase tracking-widest text-xs">Add Instrument Track</span>
+          </Button>
         </div>
         
         <div className="mt-12 flex flex-wrap justify-center gap-12 text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">
