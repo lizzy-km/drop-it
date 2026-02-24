@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Music, Save, Volume2, Waves } from 'lucide-react';
+import { Play, Square, Music, Save, Volume2, Waves, Clock } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,7 @@ const CHANNELS = 4;
 const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   volume: 0.8,
   pitch: 1.0,
+  delay: 0,
 };
 
 export function RhythmGrid({ user, clips, track, onSaveTrack }: { 
@@ -78,13 +79,27 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const buffer = await loadAudio(clip);
       const source = ctx.createBufferSource();
       const gainNode = ctx.createGain();
+      const delayNode = ctx.createDelay(1.0);
+      const feedbackNode = ctx.createGain();
 
       source.buffer = buffer;
       source.playbackRate.value = settings.pitch;
       gainNode.gain.value = settings.volume;
 
+      // Dry Path
       source.connect(gainNode);
       gainNode.connect(ctx.destination);
+
+      // Wet Path (Delay)
+      if (settings.delay > 0) {
+        delayNode.delayTime.value = 0.3; // Fixed delay time
+        feedbackNode.gain.value = settings.delay * 0.7; // Feedback mix scaled down
+        
+        gainNode.connect(delayNode);
+        delayNode.connect(feedbackNode);
+        feedbackNode.connect(delayNode);
+        delayNode.connect(ctx.destination);
+      }
       
       source.start();
     } catch (error) {
@@ -153,7 +168,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     setChannelSettings(prev => ({
       ...prev,
       [channelIdx.toString()]: {
-        ...prev[channelIdx.toString()],
+        ...prev[channelIdx.toString()] || DEFAULT_CHANNEL_SETTINGS,
         [key]: value
       }
     }));
@@ -262,6 +277,17 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                         step={1}
                         className="w-full"
                         onValueChange={(val) => updateChannelSetting(channelIdx, 'pitch', val[0] / 50)}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
+                      <Slider 
+                        value={[settings.delay * 100]} 
+                        min={0} 
+                        max={100} 
+                        step={1}
+                        className="w-full"
+                        onValueChange={(val) => updateChannelSetting(channelIdx, 'delay', val[0] / 100)}
                       />
                     </div>
                   </div>

@@ -19,6 +19,7 @@ export interface AudioClip {
 export interface ChannelSettings {
   volume: number;
   pitch: number;
+  delay: number; // 0 to 1 (mix/feedback)
 }
 
 export interface Track {
