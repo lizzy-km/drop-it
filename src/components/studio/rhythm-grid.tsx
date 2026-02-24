@@ -29,32 +29,52 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioBuffersRef = useRef<Record<string, AudioBuffer>>({});
 
-  const loadAudio = useCallback(async (clip: AudioClip) => {
-    if (audioBuffersRef.current[clip.id]) return audioBuffersRef.current[clip.id];
-    
+  const initAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
-
-    const res = await fetch(clip.audioData);
-    const arrayBuffer = await res.arrayBuffer();
-    const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
-    audioBuffersRef.current[clip.id] = audioBuffer;
-    return audioBuffer;
+    return audioContextRef.current;
   }, []);
+
+  const loadAudio = useCallback(async (clip: AudioClip) => {
+    if (audioBuffersRef.current[clip.id]) return audioBuffersRef.current[clip.id];
+    
+    const ctx = initAudioContext();
+
+    try {
+      const res = await fetch(clip.audioData);
+      const arrayBuffer = await res.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      audioBuffersRef.current[clip.id] = audioBuffer;
+      return audioBuffer;
+    } catch (error) {
+      console.error("Error loading audio:", error);
+      throw error;
+    }
+  }, [initAudioContext]);
 
   const playClip = useCallback(async (clipId: string) => {
     const clip = clips.find(c => c.id === clipId);
-    if (!clip || !audioContextRef.current) return;
+    if (!clip) return;
 
-    const buffer = await loadAudio(clip);
-    const source = audioContextRef.current.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioContextRef.current.destination);
-    source.start();
-  }, [clips, loadAudio]);
+    try {
+      const buffer = await loadAudio(clip);
+      const ctx = initAudioContext();
+      
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
 
-  const toggleCell = (channel: number, step: number) => {
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start();
+    } catch (error) {
+      console.error("Playback error:", error);
+    }
+  }, [clips, loadAudio, initAudioContext]);
+
+  const toggleCell = async (channel: number, step: number) => {
     const clipId = selectedClipsForChannel[channel];
     if (!clipId) {
       toast({ title: "Select a clip for this channel first!" });
@@ -69,17 +89,21 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     } else {
       newGrid[key] = [...(newGrid[key] || []), clipId];
       // Preview sound when placing
-      playClip(clipId);
+      await playClip(clipId);
     }
     setGrid(newGrid);
   };
 
-  const handlePlayToggle = () => {
+  const handlePlayToggle = async () => {
+    const ctx = initAudioContext();
     if (isPlaying) {
       setIsPlaying(false);
       setCurrentStep(-1);
       if (timerRef.current) clearInterval(timerRef.current);
     } else {
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
       setIsPlaying(true);
       setCurrentStep(0);
     }
@@ -186,7 +210,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               <div className="flex-1 grid grid-cols-16 gap-1.5 h-14">
                 {Array.from({ length: STEPS }).map((_, stepIdx) => {
                   const clipIds = grid[`${channelIdx}-${stepIdx}`] || [];
-                  const clipId = clipIds[0]; // Simplified for now
+                  const clipId = clipIds[0];
                   const clip = clips.find(c => c.id === clipId);
                   const CharIcon = CHARACTER_TYPES.find(ct => ct.id === clip?.characterType)?.icon;
                   
