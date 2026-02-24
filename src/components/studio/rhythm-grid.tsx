@@ -3,13 +3,15 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Music, Save, Download, Settings2, Plus, Trash2, Sliders, Disc, Loader2, Zap, Waves, Sparkles, Mic2 } from 'lucide-react';
+import { Play, Square, Music, Save, Download, Settings2, Plus, Trash2, Sliders, Disc, Loader2, Zap, Waves, Sparkles, Mic2, VolumeX, Volume2, RotateCcw, Scissors, Timer, ArrowLeftRight } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { Slider } from '@/components/ui/slider';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 const DEFAULT_CHANNELS = 4;
 const MAX_STEPS = 64;
@@ -32,6 +34,12 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   distortion: 0,
   autoTune: 0,
   color: 'bg-primary',
+  muted: false,
+  reversed: false,
+  attack: 0,
+  release: 0.1,
+  trimStart: 0,
+  trimEnd: 1,
 };
 
 function audioBufferToWav(buffer: AudioBuffer) {
@@ -125,6 +133,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioBuffersRef = useRef<Record<string, AudioBuffer>>({});
+  const reversedBuffersRef = useRef<Record<string, AudioBuffer>>({});
   const masterCompressorRef = useRef<DynamicsCompressorNode | null>(null);
 
   const initAudioContext = useCallback(() => {
@@ -160,14 +169,42 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     }
   }, [initAudioContext]);
 
-  const playClip = useCallback(async (clipId: string, channelIdxString: string) => {
+  const getReversedBuffer = (originalBuffer: AudioBuffer, clipId: string) => {
+    if (reversedBuffersRef.current[clipId]) return reversedBuffersRef.current[clipId];
+    
+    const reversedBuffer = new AudioBuffer({
+      length: originalBuffer.length,
+      numberOfChannels: originalBuffer.numberOfChannels,
+      sampleRate: originalBuffer.sampleRate
+    });
+
+    for (let i = 0; i < originalBuffer.numberOfChannels; i++) {
+      const originalData = originalBuffer.getChannelData(i);
+      const reversedData = reversedBuffer.getChannelData(i);
+      for (let j = 0; j < originalBuffer.length; j++) {
+        reversedData[j] = originalData[originalBuffer.length - 1 - j];
+      }
+    }
+    
+    reversedBuffersRef.current[clipId] = reversedBuffer;
+    return reversedBuffer;
+  };
+
+  const playClip = useCallback(async (clipId: string, channelIdxString: string, manualTime?: number) => {
+    const settings = channelSettings[channelIdxString] || DEFAULT_CHANNEL_SETTINGS;
+    if (settings.muted) return;
+
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
-    const settings = channelSettings[channelIdxString] || DEFAULT_CHANNEL_SETTINGS;
+    
     try {
       const ctx = initAudioContext();
       if (ctx.state === 'suspended') await ctx.resume();
-      const buffer = await loadAudio(clip);
+      let buffer = await loadAudio(clip);
+
+      if (settings.reversed) {
+        buffer = getReversedBuffer(buffer, clip.id);
+      }
       
       const source = ctx.createBufferSource();
       const gainNode = ctx.createGain();
@@ -177,22 +214,17 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       
       source.buffer = buffer;
 
-      // Auto-Tune / Pitch Quantization Logic
+      // Pitch/Auto-Tune
       let finalPitch = settings.pitch;
       if (settings.autoTune > 0) {
-        // Snap pitch to nearest semitone (quantization)
-        // 1 semitone factor = 2^(1/12)
         const semitoneFactor = Math.pow(2, 1/12);
         const currentSteps = Math.log(settings.pitch) / Math.log(semitoneFactor);
         const snappedSteps = Math.round(currentSteps);
         const snappedPitch = Math.pow(semitoneFactor, snappedSteps);
-        
-        // Blend between raw pitch and snapped pitch based on autoTune intensity
         finalPitch = (settings.pitch * (1 - settings.autoTune)) + (snappedPitch * settings.autoTune);
       }
 
       source.playbackRate.value = finalPitch;
-      gainNode.gain.value = settings.volume;
       panNode.pan.value = settings.pan || 0;
       filterNode.type = 'lowpass';
       filterNode.frequency.value = 200 + (Math.pow(settings.cutoff, 2) * 19800);
@@ -202,13 +234,29 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         distortionNode.oversample = '4x';
       }
 
+      // Envelope Logic (ADSR simplified to Attack/Release)
+      const now = ctx.currentTime;
+      const startTime = manualTime || now;
+      gainNode.gain.setValueAtTime(0, startTime);
+      gainNode.gain.linearRampToValueAtTime(settings.volume, startTime + settings.attack);
+      
+      const duration = buffer.duration / finalPitch;
+      const trimStart = settings.trimStart * buffer.duration;
+      const trimEnd = settings.trimEnd * buffer.duration;
+      const playDuration = Math.max(0, trimEnd - trimStart) / finalPitch;
+      
+      // Schedule Release
+      const releaseStartTime = startTime + playDuration - settings.release;
+      gainNode.gain.setValueAtTime(settings.volume, Math.max(startTime + settings.attack, releaseStartTime));
+      gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + playDuration);
+
       source.connect(distortionNode);
       distortionNode.connect(filterNode);
       filterNode.connect(gainNode);
       gainNode.connect(panNode);
       panNode.connect(masterCompressorRef.current || ctx.destination);
 
-      source.start();
+      source.start(startTime, trimStart, playDuration);
     } catch (error) {
       console.error("Playback Error:", error);
     }
@@ -240,6 +288,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
       for (let ch = 0; ch < numChannels; ch++) {
         const settings = channelSettings[ch.toString()] || DEFAULT_CHANNEL_SETTINGS;
+        if (settings.muted) continue;
+
         for (let st = 0; st < numSteps; st++) {
           const clipIds = grid[`${ch}-${st}`];
           if (clipIds) {
@@ -247,8 +297,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               const clip = clips.find(c => c.id === clipId);
               if (!clip) continue;
               
-              const buffer = audioBuffersRef.current[clip.id];
+              let buffer = audioBuffersRef.current[clip.id];
               if (!buffer) continue;
+
+              if (settings.reversed) {
+                buffer = getReversedBuffer(buffer, clip.id);
+              }
 
               const source = offlineCtx.createBufferSource();
               const gainNode = offlineCtx.createGain();
@@ -258,7 +312,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
               source.buffer = buffer;
 
-              // Apply the same Auto-Tune logic for export
               let finalPitch = settings.pitch;
               if (settings.autoTune > 0) {
                 const semitoneFactor = Math.pow(2, 1/12);
@@ -269,7 +322,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               }
 
               source.playbackRate.value = finalPitch;
-              gainNode.gain.value = settings.volume;
               panNode.pan.value = settings.pan || 0;
               filterNode.type = 'lowpass';
               filterNode.frequency.value = 200 + (Math.pow(settings.cutoff, 2) * 19800);
@@ -279,13 +331,25 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 distortionNode.oversample = '4x';
               }
 
+              const startTime = st * stepDuration;
+              const trimStart = settings.trimStart * buffer.duration;
+              const trimEnd = settings.trimEnd * buffer.duration;
+              const playDuration = Math.max(0, trimEnd - trimStart) / finalPitch;
+
+              gainNode.gain.setValueAtTime(0, startTime);
+              gainNode.gain.linearRampToValueAtTime(settings.volume, startTime + settings.attack);
+              
+              const releaseStartTime = startTime + playDuration - settings.release;
+              gainNode.gain.setValueAtTime(settings.volume, Math.max(startTime + settings.attack, releaseStartTime));
+              gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + playDuration);
+
               source.connect(distortionNode);
               distortionNode.connect(filterNode);
               filterNode.connect(gainNode);
               gainNode.connect(panNode);
               panNode.connect(compressor);
 
-              source.start(st * stepDuration);
+              source.start(startTime, trimStart, playDuration);
             }
           }
         }
@@ -474,13 +538,29 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
           const selId = selectedClipsForChannel[chIdx.toString()] || '';
           return (
             <div key={chIdx} className="flex items-center gap-10 group animate-in fade-in slide-in-from-left-4 duration-500">
-              <div className="w-[280px] shrink-0 flex items-center gap-4 bg-black/40 p-4 rounded-3xl gold-border">
-                <button
-                  onClick={() => { if (selId) playClip(selId, chIdx.toString()); }}
-                  className={cn("w-12 h-12 rounded-xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 shadow-lg shrink-0", s.color)}
-                >
-                  <Music className="w-6 h-6 text-black" />
-                </button>
+              <div className="w-[320px] shrink-0 flex items-center gap-4 bg-black/40 p-4 rounded-3xl gold-border relative">
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => { if (selId) playClip(selId, chIdx.toString()); }}
+                    className={cn(
+                      "w-12 h-12 rounded-xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 shadow-lg shrink-0", 
+                      s.muted ? "bg-neutral-800" : s.color
+                    )}
+                  >
+                    <Music className={cn("w-6 h-6", s.muted ? "text-muted-foreground" : "text-black")} />
+                  </button>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className={cn(
+                      "w-12 h-8 rounded-lg transition-colors", 
+                      s.muted ? "text-red-500 bg-red-500/10" : "text-muted-foreground hover:bg-white/5"
+                    )}
+                    onClick={() => updateChannelSetting(chIdx, 'muted', !s.muted)}
+                  >
+                    {s.muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </Button>
+                </div>
 
                 <div className="flex-1 min-w-0 space-y-1">
                   <select
@@ -509,45 +589,87 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                         <Sliders className="w-4 h-4" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent side="right" className="w-72 glass-panel p-6 rounded-[2rem] gold-border space-y-6">
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-2 text-primary">
-                          <Settings2 className="w-4 h-4" />
-                          <span className="text-[10px] font-black uppercase tracking-widest">Mixer Rack</span>
+                    <PopoverContent side="right" className="w-80 glass-panel p-6 rounded-[2rem] gold-border space-y-6">
+                      <div className="space-y-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-primary">
+                            <Settings2 className="w-4 h-4" />
+                            <span className="text-[10px] font-black uppercase tracking-widest">Mixer Rack</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             <Label className="text-[9px] font-black uppercase text-muted-foreground">Mute</Label>
+                             <Switch checked={s.muted} onCheckedChange={(v) => updateChannelSetting(chIdx, 'muted', v)} />
+                          </div>
                         </div>
-                        <div className="space-y-4">
-                          <div className="space-y-2">
-                            <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-muted-foreground"><span>Gain</span><span>{Math.round(s.volume * 100)}%</span></div>
-                            <Slider value={[s.volume * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'volume', v[0] / 100)} className="h-1.5" />
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-primary/80"><span className="flex items-center gap-1"><Mic2 className="w-3 h-3" /> Auto-Tune</span><span>{Math.round(s.autoTune * 100)}%</span></div>
-                            <Slider value={[s.autoTune * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'autoTune', v[0] / 100)} className="h-1.5 accent-primary" />
-                          </div>
 
-                          <div className="space-y-2">
-                            <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Pitch</span><span>{s.pitch.toFixed(1)}x</span></div>
-                            <Slider value={[s.pitch * 50]} min={25} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pitch', v[0] / 50)} className="h-1.5" />
-                          </div>
-                          <div className="space-y-2">
-                            <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Filter</span><span>{Math.round(s.cutoff * 100)}%</span></div>
-                            <Slider value={[s.cutoff * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'cutoff', v[0] / 100)} className="h-1.5" />
-                          </div>
-                          <div className="space-y-2">
-                            <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-primary/80"><span className="flex items-center gap-1"><Waves className="w-3 h-3" /> Drive</span><span>{Math.round(s.distortion * 100)}%</span></div>
-                            <Slider value={[s.distortion * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'distortion', v[0] / 100)} className="h-1.5 accent-primary" />
-                          </div>
-                          <div className="grid grid-cols-2 gap-4 pt-2">
-                            <div className="space-y-2">
-                              <div className="text-[8px] font-black uppercase text-muted-foreground">Pan</div>
-                              <Slider value={[(s.pan + 1) * 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pan', (v[0] / 50) - 1)} className="h-1.5" />
-                            </div>
-                            <div className="space-y-2">
-                              <div className="text-[8px] font-black uppercase text-muted-foreground"><span className="flex items-center gap-1"><Sparkles className="w-3 h-3" /> Space</span></div>
-                              <Slider value={[s.reverb * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'reverb', v[0] / 100)} className="h-1.5" />
-                            </div>
-                          </div>
+                        <div className="grid grid-cols-1 gap-6">
+                           <div className="space-y-4 bg-black/40 p-4 rounded-2xl border border-white/5">
+                             <h4 className="text-[8px] font-black uppercase text-primary/60 tracking-widest flex items-center gap-2"><Disc className="w-3 h-3" /> Basic Gain & Panning</h4>
+                             <div className="space-y-4">
+                               <div className="space-y-2">
+                                 <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-muted-foreground"><span>Gain</span><span>{Math.round(s.volume * 100)}%</span></div>
+                                 <Slider value={[s.volume * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'volume', v[0] / 100)} className="h-1.5" />
+                               </div>
+                               <div className="space-y-2">
+                                 <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-muted-foreground"><span>Pan</span><span>{s.pan < 0 ? 'L' : s.pan > 0 ? 'R' : 'C'} {Math.abs(Math.round(s.pan * 100))}%</span></div>
+                                 <Slider value={[(s.pan + 1) * 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pan', (v[0] / 50) - 1)} className="h-1.5" />
+                               </div>
+                             </div>
+                           </div>
+
+                           <div className="space-y-4 bg-black/40 p-4 rounded-2xl border border-white/5">
+                             <h4 className="text-[8px] font-black uppercase text-primary/60 tracking-widest flex items-center gap-2"><Scissors className="w-3 h-3" /> Sampler Editor</h4>
+                             <div className="space-y-5">
+                               <div className="flex items-center justify-between">
+                                  <Label className="text-[9px] font-black uppercase text-muted-foreground flex items-center gap-2"><RotateCcw className="w-3 h-3" /> Reverse Sample</Label>
+                                  <Switch checked={s.reversed} onCheckedChange={(v) => updateChannelSetting(chIdx, 'reversed', v)} />
+                               </div>
+                               <div className="space-y-2">
+                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Trim Start</span><span>{Math.round(s.trimStart * 100)}%</span></div>
+                                 <Slider value={[s.trimStart * 100]} min={0} max={s.trimEnd * 100 - 1} onValueChange={(v) => updateChannelSetting(chIdx, 'trimStart', v[0] / 100)} className="h-1.5" />
+                               </div>
+                               <div className="space-y-2">
+                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Trim End</span><span>{Math.round(s.trimEnd * 100)}%</span></div>
+                                 <Slider value={[s.trimEnd * 100]} min={s.trimStart * 100 + 1} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'trimEnd', v[0] / 100)} className="h-1.5" />
+                               </div>
+                               <div className="grid grid-cols-2 gap-4">
+                                  <div className="space-y-2">
+                                    <div className="text-[8px] font-black uppercase text-muted-foreground flex items-center gap-1"><Timer className="w-3 h-3" /> Attack</div>
+                                    <Slider value={[s.attack * 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'attack', v[0] / 50)} className="h-1.5" />
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div className="text-[8px] font-black uppercase text-muted-foreground flex items-center gap-1"><Timer className="w-3 h-3" /> Release</div>
+                                    <Slider value={[s.release * 50]} min={0.5} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'release', v[0] / 50)} className="h-1.5" />
+                                  </div>
+                               </div>
+                             </div>
+                           </div>
+
+                           <div className="space-y-4 bg-black/40 p-4 rounded-2xl border border-white/5">
+                             <h4 className="text-[8px] font-black uppercase text-primary/60 tracking-widest flex items-center gap-2"><Waves className="w-3 h-3" /> Effects Rack</h4>
+                             <div className="space-y-4">
+                               <div className="space-y-2">
+                                 <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-primary/80"><span className="flex items-center gap-1"><Mic2 className="w-3 h-3" /> Auto-Tune</span><span>{Math.round(s.autoTune * 100)}%</span></div>
+                                 <Slider value={[s.autoTune * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'autoTune', v[0] / 100)} className="h-1.5 accent-primary" />
+                               </div>
+                               <div className="space-y-2">
+                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Pitch</span><span>{s.pitch.toFixed(1)}x</span></div>
+                                 <Slider value={[s.pitch * 50]} min={25} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pitch', v[0] / 50)} className="h-1.5" />
+                               </div>
+                               <div className="space-y-2">
+                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Filter</span><span>{Math.round(s.cutoff * 100)}%</span></div>
+                                 <Slider value={[s.cutoff * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'cutoff', v[0] / 100)} className="h-1.5" />
+                               </div>
+                               <div className="space-y-2">
+                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-primary/80"><span className="flex items-center gap-1"><Waves className="w-3 h-3" /> Drive</span><span>{Math.round(s.distortion * 100)}%</span></div>
+                                 <Slider value={[s.distortion * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'distortion', v[0] / 100)} className="h-1.5 accent-primary" />
+                               </div>
+                               <div className="space-y-2">
+                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span className="flex items-center gap-1"><Sparkles className="w-3 h-3" /> Space</span><span>{Math.round(s.reverb * 100)}%</span></div>
+                                 <Slider value={[s.reverb * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'reverb', v[0] / 100)} className="h-1.5" />
+                               </div>
+                             </div>
+                           </div>
                         </div>
                       </div>
                     </PopoverContent>
@@ -559,7 +681,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 </div>
               </div>
 
-              <div className="flex-1 flex gap-2 h-16 py-1 overflow-x-auto custom-scrollbar">
+              <div className="flex-1 flex gap-2 h-20 py-1 overflow-x-auto custom-scrollbar">
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const clipIds = grid[`${chIdx}-${stepIdx}`] || [];
                   const activeClipId = clipIds[0];
@@ -572,18 +694,20 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                   return (
                     <button
                       key={stepIdx}
+                      disabled={s.muted}
                       onClick={() => toggleCell(chIdx, stepIdx)}
                       className={cn(
-                        "w-12 h-full rounded-2xl transition-all duration-300 flex items-center justify-center relative overflow-hidden shrink-0 group/cell gold-shadow",
+                        "w-14 h-full rounded-2xl transition-all duration-300 flex items-center justify-center relative overflow-hidden shrink-0 group/cell gold-shadow",
                         isCurrent ? "scale-110 z-10" : "scale-100",
                         clip 
-                          ? `${s.color} shadow-2xl ring-2 ring-white/30 translate-y-[-2px]` 
+                          ? `${s.muted ? "bg-neutral-800 opacity-40" : s.color} shadow-2xl ring-2 ring-white/30 translate-y-[-2px]` 
                           : "bg-neutral-800/80 hover:bg-neutral-700/80 border border-white/5",
                         isMajorBeat && !clip ? "bg-neutral-800 border-white/10" : "",
-                        isCurrent && !clip ? "ring-2 ring-primary/40 bg-neutral-700" : ""
+                        isCurrent && !clip ? "ring-2 ring-primary/40 bg-neutral-700" : "",
+                        s.muted && clip && "grayscale"
                       )}
                     >
-                      {CharIcon && <CharIcon className={cn("w-6 h-6 transition-transform group-hover/cell:scale-125", isCurrent ? "animate-bounce text-black" : "text-black/80")} />}
+                      {CharIcon && <CharIcon className={cn("w-7 h-7 transition-transform group-hover/cell:scale-125", isCurrent ? "animate-bounce text-black" : "text-black/80")} />}
                       {isCurrent && <div className="absolute inset-0 bg-primary/20 animate-pulse pointer-events-none" />}
                       {!clip && isMajorBeat && <div className="absolute bottom-1 w-1 h-1 bg-white/10 rounded-full" />}
                     </button>

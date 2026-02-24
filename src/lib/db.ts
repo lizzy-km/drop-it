@@ -26,6 +26,12 @@ export interface ChannelSettings {
   distortion: number; // 0 to 1 (drive)
   autoTune: number; // 0 to 1 (quantization intensity)
   color: string; // Hex or tailwind class color
+  muted: boolean;
+  reversed: boolean;
+  attack: number; // 0 to 2 seconds
+  release: number; // 0 to 2 seconds
+  trimStart: number; // 0 to 1 (percentage)
+  trimEnd: number; // 0 to 1 (percentage)
 }
 
 export interface Track {
