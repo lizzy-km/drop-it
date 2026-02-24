@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -111,7 +110,6 @@ export default function BrowsePage() {
     const panNode = ctx.createStereoPanner();
     const distortionNode = ctx.createWaveShaper();
     
-    // Pitch calculation including Auto-Tune simulation
     let finalPitch = settings.pitch ?? 1.0;
     if (settings.autoTune > 0) {
       const semitoneFactor = Math.pow(2, 1/12);
@@ -137,7 +135,6 @@ export default function BrowsePage() {
     const trimEnd = (settings.trimEnd || 1) * buffer.duration;
     const playDuration = Math.max(0, trimEnd - trimStart) / finalPitch;
 
-    // Release envelope
     const releaseStartTime = ctx.currentTime + playDuration - (settings.release || 0.1);
     gainNode.gain.setValueAtTime(settings.volume ?? 0.8, Math.max(ctx.currentTime + (settings.attack || 0), releaseStartTime));
     gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + playDuration);
@@ -236,7 +233,7 @@ export default function BrowsePage() {
                 <ChevronLeft className="w-6 h-6" />
               </Button>
             </Link>
-            <h1 className="text-4xl font-black tracking-tighter text-primary italic uppercase">Community_Hub</h1>
+            <h1 className="text-4xl font-black tracking-tighter text-primary italic uppercase">My_Drop</h1>
           </div>
           <Link href="/studio">
              <Button className="rounded-full bg-primary hover:bg-primary/90 px-8 h-12 font-black text-black uppercase tracking-widest text-xs">

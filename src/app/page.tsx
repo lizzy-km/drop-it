@@ -95,7 +95,7 @@ export default function LandingPage() {
         <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500">
           <Link href="/browse">
             <Button variant="ghost" className="text-muted-foreground hover:text-primary font-bold gap-2 px-8 rounded-full h-12">
-              Browse Community Drops
+              Browse My Drop
             </Button>
           </Link>
         </div>

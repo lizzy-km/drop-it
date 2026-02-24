@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState, Suspense } from 'react';
@@ -87,7 +86,7 @@ function StudioContent() {
         <div className="flex items-center gap-4">
           <ReactLink href="/browse">
              <Button variant="outline" className="rounded-full font-black px-8 h-12 border-primary/20 bg-black/20 hover:bg-primary/5 uppercase tracking-widest text-xs">
-               Community Hub
+               My Drop
              </Button>
           </ReactLink>
         </div>
