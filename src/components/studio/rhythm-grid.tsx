@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Music, Save, Volume2, Waves, Clock, MoveHorizontal, Filter, Plus, Trash2, Settings2, Sparkles, Disc, Sliders } from 'lucide-react';
+import { Play, Square, Music, Save, Download, Settings2, Plus, Trash2, Sliders, Disc, Loader2 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,62 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   color: 'bg-primary',
 };
 
+// Simple WAV encoder helper
+function audioBufferToWav(buffer: AudioBuffer) {
+  const numOfChan = buffer.numberOfChannels;
+  const length = buffer.length * numOfChan * 2 + 44;
+  const bufferArray = new ArrayBuffer(length);
+  const view = new DataView(bufferArray);
+  const channels = [];
+  let i;
+  let sample;
+  let offset = 0;
+  let pos = 0;
+
+  // write WAVE header
+  setUint32(0x46464952); // "RIFF"
+  setUint32(length - 8); // file length - 8
+  setUint32(0x45564157); // "WAVE"
+
+  setUint32(0x20746d66); // "fmt " chunk
+  setUint32(16); // length = 16
+  setUint16(1); // PCM (uncompressed)
+  setUint16(numOfChan);
+  setUint32(buffer.sampleRate);
+  setUint32(buffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
+  setUint16(numOfChan * 2); // block-align
+  setUint16(16); // 16-bit (hardcoded)
+
+  setUint32(0x61746164); // "data" - chunk
+  setUint32(length - pos - 4); // chunk length
+
+  // write interleaved data
+  for (i = 0; i < buffer.numberOfChannels; i++)
+    channels.push(buffer.getChannelData(i));
+
+  while (pos < length) {
+    for (i = 0; i < numOfChan; i++) {
+      sample = Math.max(-1, Math.min(1, channels[i][offset])); // clamp
+      sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0; // scale to 16nd-bit signed int
+      view.setInt16(pos, sample, true); // write 16nd-bit sample
+      pos += 2;
+    }
+    offset++;
+  }
+
+  return new Blob([bufferArray], { type: "audio/wav" });
+
+  function setUint16(data: number) {
+    view.setUint16(pos, data, true);
+    pos += 2;
+  }
+
+  function setUint32(data: number) {
+    view.setUint32(pos, data, true);
+    pos += 4;
+  }
+}
+
 export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   user: User;
   clips: AudioClip[];
@@ -43,6 +99,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const [numSteps, setNumSteps] = useState(track?.numSteps || 16);
   const [numChannels, setNumChannels] = useState(track?.numChannels || DEFAULT_CHANNELS);
   const [grid, setGrid] = useState<Record<string, string[]>>(track?.grid || {});
+  const [isExporting, setIsExporting] = useState(false);
   const [channelSettings, setChannelSettings] = useState<Record<string, ChannelSettings>>(
     track?.channelSettings ||
     Object.fromEntries(Array.from({ length: DEFAULT_CHANNELS }).map((_, i) => [i.toString(), { ...DEFAULT_CHANNEL_SETTINGS, color: CHANNEL_COLORS[i % CHANNEL_COLORS.length].class }]))
@@ -64,9 +121,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     return audioContextRef.current;
   }, []);
 
-  const loadAudio = useCallback(async (clip: AudioClip) => {
+  const loadAudio = useCallback(async (clip: AudioClip, targetContext?: BaseAudioContext) => {
     if (audioBuffersRef.current[clip.id]) return audioBuffersRef.current[clip.id];
-    const ctx = initAudioContext();
+    const ctx = targetContext || initAudioContext();
     try {
       const res = await fetch(clip.audioData);
       const arrayBuffer = await res.arrayBuffer();
@@ -110,6 +167,79 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       console.error("Playback Error:", error);
     }
   }, [clips, loadAudio, initAudioContext, channelSettings]);
+
+  const exportToAudio = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    
+    try {
+      const stepDuration = (60 / bpm) / 4;
+      const totalDuration = numSteps * stepDuration;
+      const sampleRate = 44100;
+      const offlineCtx = new OfflineAudioContext(2, Math.ceil(sampleRate * totalDuration), sampleRate);
+
+      // Pre-load all used buffers into the offline context
+      const uniqueUsedClipIds = new Set(Object.values(grid).flat());
+      for (const id of uniqueUsedClipIds) {
+        const clip = clips.find(c => c.id === id);
+        if (clip) await loadAudio(clip, offlineCtx);
+      }
+
+      // Schedule all active cells
+      for (let ch = 0; ch < numChannels; ch++) {
+        const settings = channelSettings[ch.toString()] || DEFAULT_CHANNEL_SETTINGS;
+        for (let st = 0; st < numSteps; st++) {
+          const clipIds = grid[`${ch}-${st}`];
+          if (clipIds) {
+            for (const clipId of clipIds) {
+              const clip = clips.find(c => c.id === clipId);
+              if (!clip) continue;
+              
+              const buffer = audioBuffersRef.current[clip.id];
+              if (!buffer) continue;
+
+              const source = offlineCtx.createBufferSource();
+              const gainNode = offlineCtx.createGain();
+              const panNode = offlineCtx.createStereoPanner();
+              const filterNode = offlineCtx.createBiquadFilter();
+
+              source.buffer = buffer;
+              source.playbackRate.value = settings.pitch;
+              gainNode.gain.value = settings.volume;
+              panNode.pan.value = settings.pan || 0;
+              filterNode.type = 'lowpass';
+              filterNode.frequency.value = 200 + (Math.pow(settings.cutoff, 2) * 19800);
+
+              source.connect(filterNode);
+              filterNode.connect(gainNode);
+              gainNode.connect(panNode);
+              panNode.connect(offlineCtx.destination);
+
+              source.start(st * stepDuration);
+            }
+          }
+        }
+      }
+
+      const renderedBuffer = await offlineCtx.startRendering();
+      const wavBlob = audioBufferToWav(renderedBuffer);
+      const url = URL.createObjectURL(wavBlob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${title.toLowerCase().replace(/\s+/g, '_')}_export.wav`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({ title: "Export Complete", description: "Your high-quality .wav file is ready!" });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Export Failed", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const toggleCell = async (channelIdx: number, step: number) => {
     const clipId = selectedClipsForChannel[channelIdx.toString()];
@@ -247,12 +377,25 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
             {isPlaying ? <Square className="w-5 h-5 mr-3 fill-current" /> : <Play className="w-5 h-5 mr-3 fill-current" />}
             {isPlaying ? "Stop" : "Play"}
           </Button>
-          <Button variant="outline" className="rounded-full h-16 px-8 font-black uppercase tracking-widest border-primary/20 bg-black/20 hover:bg-primary/5" onClick={() => {
-            db.saveTrack({ id: track?.id || crypto.randomUUID(), userId: user.id, title, bpm, numChannels, numSteps, grid, channelSettings, selectedClips: selectedClipsForChannel, createdAt: Date.now() });
-            toast({ title: "Session Saved" });
-          }}>
-            <Save className="w-5 h-5" />
-          </Button>
+
+          <div className="flex items-center gap-2 bg-black/20 p-2 rounded-full border border-primary/10">
+            <Button variant="ghost" size="icon" className="rounded-full h-12 w-12 text-primary hover:bg-primary/10" onClick={() => {
+              db.saveTrack({ id: track?.id || crypto.randomUUID(), userId: user.id, title, bpm, numChannels, numSteps, grid, channelSettings, selectedClips: selectedClipsForChannel, createdAt: Date.now() });
+              toast({ title: "Session Saved" });
+            }}>
+              <Save className="w-5 h-5" />
+            </Button>
+            
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              disabled={isExporting}
+              className="rounded-full h-12 w-12 text-primary hover:bg-primary/10 disabled:opacity-50" 
+              onClick={exportToAudio}
+            >
+              {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+            </Button>
+          </div>
         </div>
       </div>
 
