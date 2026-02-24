@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Upload, FileAudio, Save, Disc } from 'lucide-react';
+import { Upload, FileAudio, Save, Disc, Check } from 'lucide-react';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
 import { db, User } from '@/lib/db';
@@ -29,77 +29,91 @@ export function AudioUploader({ user, onClipSaved }: { user: User; onClipSaved: 
       db.saveClip({
         id: crypto.randomUUID(),
         userId: user.id,
-        name: clipName || 'IMPORTED_SAMPLE',
+        name: clipName || 'EXTERNAL_SAMPLE',
         audioData: reader.result as string,
         characterType: selectedChar,
         createdAt: Date.now()
       });
       setSelectedFile(null);
       onClipSaved();
-      toast({ title: "Sample Imported" });
+      toast({ title: "Sample Imported Successfully" });
     };
   };
 
   return (
-    <div className="glass-panel rounded-[2.5rem] p-10 border-white/5 space-y-8 flex flex-col">
-      <h3 className="text-2xl font-black flex items-center gap-3 italic">
-        <Upload className="w-6 h-6 text-primary" /> IMPORT
+    <div className="glass-panel rounded-[2.5rem] p-12 space-y-10 flex flex-col gold-border">
+      <h3 className="text-3xl font-black flex items-center gap-4 italic tracking-tighter text-primary">
+        <Upload className="w-7 h-7" /> IMPORT
       </h3>
 
-      <div className="flex-1 flex flex-col items-center justify-center p-10 border-2 border-dashed border-white/5 rounded-3xl bg-white/5 relative cursor-pointer hover:bg-white/10 transition-all group overflow-hidden">
+      <div className="flex-1 flex flex-col items-center justify-center p-12 border-2 border-dashed border-primary/20 rounded-[2.5rem] bg-black/40 relative cursor-pointer hover:bg-primary/5 transition-all group overflow-hidden shadow-inner">
         <input 
           type="file" 
           accept="audio/*" 
-          className="absolute inset-0 opacity-0 cursor-pointer" 
+          className="absolute inset-0 opacity-0 cursor-pointer z-10" 
           onChange={handleFileChange}
         />
         {selectedFile ? (
-          <div className="text-center space-y-4">
-            <FileAudio className="w-16 h-16 text-primary mx-auto animate-bounce-subtle" />
+          <div className="text-center space-y-6 animate-in zoom-in-95">
+            <div className="w-24 h-24 bg-primary/10 rounded-[2rem] flex items-center justify-center mx-auto gold-border">
+              <FileAudio className="w-12 h-12 text-primary animate-bounce-subtle" />
+            </div>
             <div>
-              <p className="text-sm font-black uppercase tracking-widest truncate max-w-[200px]">{selectedFile.name}</p>
-              <p className="text-[10px] font-black uppercase text-muted-foreground">Ready to process</p>
+              <p className="text-sm font-black uppercase tracking-[0.2em] truncate max-w-[240px] text-primary">{selectedFile.name}</p>
+              <p className="text-[10px] font-black uppercase text-muted-foreground mt-1 tracking-widest">WAV / MP3 READY</p>
             </div>
           </div>
         ) : (
-          <div className="text-center space-y-4">
-            <Disc className="w-16 h-16 text-white/10 mx-auto group-hover:text-primary/50 group-hover:rotate-180 transition-all duration-1000" />
+          <div className="text-center space-y-6">
+            <Disc className="w-20 h-20 text-white/5 mx-auto group-hover:text-primary/30 group-hover:rotate-180 transition-all duration-1000" />
             <div>
-              <p className="text-sm font-black uppercase tracking-widest text-muted-foreground group-hover:text-white transition-colors">Drop WAV/MP3 Here</p>
-              <p className="text-[10px] font-black uppercase text-muted-foreground/40 mt-1">Local file system</p>
+              <p className="text-sm font-black uppercase tracking-[0.3em] text-muted-foreground group-hover:text-white transition-colors">DRAG_SOUND_ASSET</p>
+              <p className="text-[10px] font-black uppercase text-muted-foreground/30 mt-2 tracking-widest">Local Filesystem</p>
             </div>
           </div>
         )}
       </div>
 
-      {selectedFile && (
-        <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
-           <input 
-            value={clipName}
-            onChange={(e) => setClipName(e.target.value.toUpperCase())}
-            placeholder="SAMPLE_NAME"
-            className="w-full text-center text-xs font-black bg-transparent border-b border-white/10 py-2 focus:outline-none focus:border-primary text-primary tracking-widest"
-          />
-          <div className="grid grid-cols-4 gap-4">
-            {CHARACTER_TYPES.map((char) => {
-              const Icon = char.icon;
-              return (
-                <button
-                  key={char.id}
-                  onClick={() => setSelectedChar(char.id)}
-                  className={cn(
-                    "p-4 rounded-2xl border-2 transition-all",
-                    selectedChar === char.id ? "border-primary bg-primary/10 shadow-lg" : "border-transparent bg-white/5 hover:bg-white/10"
-                  )}
-                >
-                  <Icon className={cn("w-10 h-10 mx-auto", char.color)} />
-                </button>
-              );
-            })}
+      {selectedFile ? (
+        <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+           <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.3em] px-2">Identification</label>
+              <input 
+                value={clipName}
+                onChange={(e) => setClipName(e.target.value.toUpperCase())}
+                placeholder="SAMPLE_NAME"
+                className="w-full text-center text-xs font-black bg-neutral-900 border border-primary/20 rounded-2xl py-4 focus:outline-none focus:border-primary text-primary tracking-[0.4em]"
+              />
+           </div>
+          <div className="space-y-5">
+            <label className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.3em] px-2">Assign Visualizer</label>
+            <div className="grid grid-cols-4 gap-4">
+              {CHARACTER_TYPES.map((char) => {
+                const Icon = char.icon;
+                return (
+                  <button
+                    key={char.id}
+                    onClick={() => setSelectedChar(char.id)}
+                    className={cn(
+                      "p-5 rounded-3xl border-2 transition-all flex flex-col items-center justify-center",
+                      selectedChar === char.id 
+                        ? "border-primary bg-primary/10 shadow-lg" 
+                        : "border-transparent bg-black/40 hover:bg-neutral-800"
+                    )}
+                  >
+                    <Icon className={cn("w-9 h-9", char.color)} />
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <Button className="w-full h-14 rounded-full bg-primary text-black font-black uppercase tracking-widest hover:bg-primary/90 shadow-2xl" onClick={handleUpload}>
-            <Save className="w-4 h-4 mr-3" /> Commit Import
+          <Button className="w-full h-16 rounded-full bg-primary text-black font-black uppercase tracking-[0.3em] hover:bg-primary/90 shadow-2xl scale-105" onClick={handleUpload}>
+            <Save className="w-5 h-5 mr-3" /> Commit Import
           </Button>
+        </div>
+      ) : (
+        <div className="h-[280px] flex items-center justify-center border border-white/5 rounded-[2.5rem] opacity-20 pointer-events-none">
+           <p className="text-[10px] font-black uppercase tracking-[0.5em]">Awaiting Selection</p>
         </div>
       )}
     </div>

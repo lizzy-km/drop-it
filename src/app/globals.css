@@ -4,23 +4,23 @@
 
 @layer base {
   :root {
-    --background: 0 0% 4%;
+    --background: 0 0% 6%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 7%;
+    --card: 0 0% 9%;
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 7%;
+    --popover: 0 0% 9%;
     --popover-foreground: 0 0% 98%;
     --primary: 48 100% 50%;
     --primary-foreground: 0 0% 0%;
-    --secondary: 0 0% 12%;
+    --secondary: 0 0% 15%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 12%;
+    --muted: 0 0% 15%;
     --muted-foreground: 0 0% 63.9%;
     --accent: 48 100% 50%;
     --accent-foreground: 0 0% 0%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
+    --border: 48 100% 50% / 0.15;
     --input: 0 0% 14.9%;
     --ring: 48 100% 50%;
     --radius: 1.5rem;
@@ -39,9 +39,9 @@
 
 .studio-grid-bg {
   background-image: 
-    linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px),
-    linear-gradient(to bottom, hsl(var(--border) / 0.5) 1px, transparent 1px);
-  background-size: 40px 40px;
+    linear-gradient(to right, hsl(var(--primary) / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--primary) / 0.05) 1px, transparent 1px);
+  background-size: 60px 60px;
 }
 
 @keyframes bounce-subtle {
@@ -54,18 +54,26 @@
 }
 
 .glass-panel {
-  @apply bg-card/80 backdrop-blur-xl border border-white/5 shadow-2xl;
+  @apply bg-card/90 backdrop-blur-xl border border-primary/20 shadow-2xl;
+}
+
+.gold-border {
+  @apply border border-primary/30;
+}
+
+.gold-shadow {
+  @apply shadow-[0_0_20px_rgba(250,204,21,0.1)];
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-transparent;
+  @apply bg-black/20;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-white/10 rounded-full hover:bg-primary/50 transition-colors;
+  @apply bg-primary/20 rounded-full hover:bg-primary/40 transition-colors;
 }
