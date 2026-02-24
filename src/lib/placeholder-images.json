@@ -1,3 +1,28 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "avatar-1",
+      "description": "User Avatar 1",
+      "imageUrl": "https://images.unsplash.com/photo-1628157588553-5eeea00af15c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHxwcm9maWxlJTIwYXZhdGFyfGVufDB8fHx8MTc3MTgxMDQzMHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "profile avatar"
+    },
+    {
+      "id": "avatar-2",
+      "description": "User Avatar 2",
+      "imageUrl": "https://images.unsplash.com/photo-1707857046403-b8e02b7fe163?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxMHx8cHJvZmlsZSUyMHBvcnRyYWl0fGVufDB8fHx8MTc3MTkwMDY5Mnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "profile portrait"
+    },
+    {
+      "id": "char-1",
+      "description": "Beat Character 1",
+      "imageUrl": "https://images.unsplash.com/photo-1707734250622-46ab4db80b77?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxjdXRlJTIwbW9uc3RlcnxlbnwwfHx8fDE3NzE4ODQ1MTJ8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "cute monster"
+    },
+    {
+      "id": "char-2",
+      "description": "Beat Character 2",
+      "imageUrl": "https://images.unsplash.com/photo-1767716134810-6431166e7a97?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxyb2JvdCUyMG1hc2NvdHxlbnwwfHx8fDE3NzE5MDA2OTN8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "robot mascot"
+    }
+  ]
 }
