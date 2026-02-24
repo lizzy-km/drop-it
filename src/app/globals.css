@@ -5,45 +5,45 @@
 
 @layer base {
   :root {
-    --background: 282 44% 93%;
-    --foreground: 261 43% 10%;
+    --background: 45 100% 97%;
+    --foreground: 20 20% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 261 43% 15%;
+    --card-foreground: 20 20% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 261 43% 15%;
-    --primary: 261 43% 47%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 261 20% 90%;
-    --secondary-foreground: 261 43% 20%;
-    --muted: 261 10% 85%;
-    --muted-foreground: 261 20% 40%;
-    --accent: 340 82% 52%;
+    --popover-foreground: 20 20% 15%;
+    --primary: 47 100% 45%;
+    --primary-foreground: 20 20% 10%;
+    --secondary: 47 40% 92%;
+    --secondary-foreground: 20 20% 20%;
+    --muted: 47 30% 90%;
+    --muted-foreground: 47 20% 40%;
+    --accent: 38 92% 50%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 261 20% 85%;
-    --input: 261 20% 85%;
-    --ring: 261 43% 47%;
-    --radius: 0.75rem;
+    --border: 47 30% 88%;
+    --input: 47 30% 88%;
+    --ring: 47 100% 45%;
+    --radius: 1.25rem;
   }
   .dark {
-    --background: 261 43% 10%;
-    --foreground: 282 44% 93%;
-    --card: 261 43% 15%;
-    --card-foreground: 282 44% 93%;
-    --popover: 261 43% 15%;
-    --popover-foreground: 282 44% 93%;
-    --primary: 261 43% 60%;
-    --primary-foreground: 261 43% 10%;
-    --secondary: 261 20% 20%;
-    --secondary-foreground: 282 44% 93%;
-    --muted: 261 20% 20%;
-    --muted-foreground: 261 20% 60%;
-    --accent: 340 82% 52%;
+    --background: 45 30% 5%;
+    --foreground: 45 100% 96%;
+    --card: 45 30% 8%;
+    --card-foreground: 45 100% 96%;
+    --popover: 45 30% 8%;
+    --popover-foreground: 45 100% 96%;
+    --primary: 47 100% 50%;
+    --primary-foreground: 45 30% 5%;
+    --secondary: 45 30% 15%;
+    --secondary-foreground: 45 100% 96%;
+    --muted: 45 30% 15%;
+    --muted-foreground: 45 30% 60%;
+    --accent: 38 92% 50%;
     --accent-foreground: 0 0% 100%;
-    --border: 261 20% 20%;
-    --input: 261 20% 20%;
-    --ring: 261 43% 60%;
+    --border: 45 30% 15%;
+    --input: 45 30% 15%;
+    --ring: 47 100% 50%;
   }
 }
 
@@ -69,4 +69,18 @@
 
 .animate-bounce-subtle {
   animation: bounce-subtle 2s infinite ease-in-out;
+}
+
+/* Custom scrollbar for yellow theme */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted/30;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-primary/40 rounded-full hover:bg-primary/60 transition-colors;
 }
