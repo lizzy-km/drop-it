@@ -24,6 +24,7 @@ export interface ChannelSettings {
   pan: number; // -1 to 1
   cutoff: number; // 0 to 1
   distortion: number; // 0 to 1 (drive)
+  autoTune: number; // 0 to 1 (quantization intensity)
   color: string; // Hex or tailwind class color
 }
 

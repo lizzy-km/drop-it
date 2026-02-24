@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Music, Save, Download, Settings2, Plus, Trash2, Sliders, Disc, Loader2, Zap, Waves } from 'lucide-react';
+import { Play, Square, Music, Save, Download, Settings2, Plus, Trash2, Sliders, Disc, Loader2, Zap, Waves, Sparkles, Mic2 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
@@ -30,10 +30,10 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   pan: 0,
   cutoff: 1.0,
   distortion: 0,
+  autoTune: 0,
   color: 'bg-primary',
 };
 
-// Simple WAV encoder helper
 function audioBufferToWav(buffer: AudioBuffer) {
   const numOfChan = buffer.numberOfChannels;
   const length = buffer.length * numOfChan * 2 + 44;
@@ -87,7 +87,6 @@ function audioBufferToWav(buffer: AudioBuffer) {
   return new Blob([bufferArray], { type: "audio/wav" });
 }
 
-// Helper to create distortion curve
 function makeDistortionCurve(amount: number) {
   const k = amount * 100;
   const n_samples = 44100;
@@ -132,7 +131,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     if (!audioContextRef.current) {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       
-      // Setup Master Compressor
       const compressor = ctx.createDynamicsCompressor();
       compressor.threshold.setValueAtTime(-24, ctx.currentTime);
       compressor.knee.setValueAtTime(40, ctx.currentTime);
@@ -178,7 +176,22 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const distortionNode = ctx.createWaveShaper();
       
       source.buffer = buffer;
-      source.playbackRate.value = settings.pitch;
+
+      // Auto-Tune / Pitch Quantization Logic
+      let finalPitch = settings.pitch;
+      if (settings.autoTune > 0) {
+        // Snap pitch to nearest semitone (quantization)
+        // 1 semitone factor = 2^(1/12)
+        const semitoneFactor = Math.pow(2, 1/12);
+        const currentSteps = Math.log(settings.pitch) / Math.log(semitoneFactor);
+        const snappedSteps = Math.round(currentSteps);
+        const snappedPitch = Math.pow(semitoneFactor, snappedSteps);
+        
+        // Blend between raw pitch and snapped pitch based on autoTune intensity
+        finalPitch = (settings.pitch * (1 - settings.autoTune)) + (snappedPitch * settings.autoTune);
+      }
+
+      source.playbackRate.value = finalPitch;
       gainNode.gain.value = settings.volume;
       panNode.pan.value = settings.pan || 0;
       filterNode.type = 'lowpass';
@@ -189,7 +202,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         distortionNode.oversample = '4x';
       }
 
-      // Routing: Source -> Distortion -> Filter -> Gain -> Pan -> Master Compressor
       source.connect(distortionNode);
       distortionNode.connect(filterNode);
       filterNode.connect(gainNode);
@@ -208,18 +220,16 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     
     try {
       const stepDuration = (60 / bpm) / 4;
-      const totalDuration = numSteps * stepDuration + 2; // Extra 2s for tails
+      const totalDuration = numSteps * stepDuration + 2;
       const sampleRate = 44100;
       const offlineCtx = new OfflineAudioContext(2, Math.ceil(sampleRate * totalDuration), sampleRate);
 
-      // Pre-load all used buffers
       const uniqueUsedClipIds = new Set(Object.values(grid).flat());
       for (const id of uniqueUsedClipIds) {
         const clip = clips.find(c => c.id === id);
         if (clip) await loadAudio(clip, offlineCtx);
       }
 
-      // Setup Master Compressor for Offline context
       const compressor = offlineCtx.createDynamicsCompressor();
       compressor.threshold.setValueAtTime(-24, offlineCtx.currentTime);
       compressor.knee.setValueAtTime(40, offlineCtx.currentTime);
@@ -247,7 +257,18 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               const distortionNode = offlineCtx.createWaveShaper();
 
               source.buffer = buffer;
-              source.playbackRate.value = settings.pitch;
+
+              // Apply the same Auto-Tune logic for export
+              let finalPitch = settings.pitch;
+              if (settings.autoTune > 0) {
+                const semitoneFactor = Math.pow(2, 1/12);
+                const currentSteps = Math.log(settings.pitch) / Math.log(semitoneFactor);
+                const snappedSteps = Math.round(currentSteps);
+                const snappedPitch = Math.pow(semitoneFactor, snappedSteps);
+                finalPitch = (settings.pitch * (1 - settings.autoTune)) + (snappedPitch * settings.autoTune);
+              }
+
+              source.playbackRate.value = finalPitch;
               gainNode.gain.value = settings.volume;
               panNode.pan.value = settings.pan || 0;
               filterNode.type = 'lowpass';
@@ -375,7 +396,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   return (
     <div className="space-y-8">
-      {/* Sequencer Header */}
       <div className="glass-panel p-8 rounded-[2.5rem] gold-shadow flex flex-col xl:flex-row items-center justify-between gap-8 border-primary/30">
         <div className="flex flex-col md:flex-row items-center gap-10 flex-1 w-full">
           <div className="space-y-1 flex-1">
@@ -448,14 +468,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         </div>
       </div>
 
-      {/* Main Grid View */}
       <div className="glass-panel rounded-[2.5rem] p-10 gold-shadow space-y-6 overflow-x-auto border-primary/20">
         {Array.from({ length: numChannels }).map((_, chIdx) => {
           const s = channelSettings[chIdx.toString()] || DEFAULT_CHANNEL_SETTINGS;
           const selId = selectedClipsForChannel[chIdx.toString()] || '';
           return (
             <div key={chIdx} className="flex items-center gap-10 group animate-in fade-in slide-in-from-left-4 duration-500">
-              {/* Channel Strip */}
               <div className="w-[280px] shrink-0 flex items-center gap-4 bg-black/40 p-4 rounded-3xl gold-border">
                 <button
                   onClick={() => { if (selId) playClip(selId, chIdx.toString()); }}
@@ -502,6 +520,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                             <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-muted-foreground"><span>Gain</span><span>{Math.round(s.volume * 100)}%</span></div>
                             <Slider value={[s.volume * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'volume', v[0] / 100)} className="h-1.5" />
                           </div>
+                          
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-primary/80"><span className="flex items-center gap-1"><Mic2 className="w-3 h-3" /> Auto-Tune</span><span>{Math.round(s.autoTune * 100)}%</span></div>
+                            <Slider value={[s.autoTune * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'autoTune', v[0] / 100)} className="h-1.5 accent-primary" />
+                          </div>
+
                           <div className="space-y-2">
                             <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Pitch</span><span>{s.pitch.toFixed(1)}x</span></div>
                             <Slider value={[s.pitch * 50]} min={25} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pitch', v[0] / 50)} className="h-1.5" />
@@ -520,7 +544,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                               <Slider value={[(s.pan + 1) * 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pan', (v[0] / 50) - 1)} className="h-1.5" />
                             </div>
                             <div className="space-y-2">
-                              <div className="text-[8px] font-black uppercase text-muted-foreground">Space</div>
+                              <div className="text-[8px] font-black uppercase text-muted-foreground"><span className="flex items-center gap-1"><Sparkles className="w-3 h-3" /> Space</span></div>
                               <Slider value={[s.reverb * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'reverb', v[0] / 100)} className="h-1.5" />
                             </div>
                           </div>
@@ -535,7 +559,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 </div>
               </div>
 
-              {/* Step Grid Area */}
               <div className="flex-1 flex gap-2 h-16 py-1 overflow-x-auto custom-scrollbar">
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const clipIds = grid[`${chIdx}-${stepIdx}`] || [];
