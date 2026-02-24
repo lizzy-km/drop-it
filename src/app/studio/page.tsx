@@ -6,10 +6,13 @@ import { VoiceRecorder } from '@/components/studio/voice-recorder';
 import { AudioUploader } from '@/components/studio/audio-uploader';
 import { RhythmGrid } from '@/components/studio/rhythm-grid';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Disc, Library, Trash2, LayoutDashboard, Zap } from 'lucide-react';
+import { ChevronLeft, Disc, Library, Trash2, LayoutDashboard, Zap, Settings2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CHARACTER_TYPES } from '@/components/character-icons';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
+import { toast } from '@/hooks/use-toast';
 
 export default function StudioPage() {
   const [user, setUser] = useState<User | null>(null);
@@ -33,6 +36,20 @@ export default function StudioPage() {
   const deleteClip = (id: string) => {
     db.deleteClip(id);
     refreshClips();
+  };
+
+  const updateClipMetadata = (id: string, name: string, characterType: string) => {
+    const clip = clips.find(c => c.id === id);
+    if (clip) {
+      const updatedClips = clips.map(c => c.id === id ? { ...c, name, characterType } : c);
+      // We need a proper db method, for now let's just rewrite the clips array
+      // In a real app we'd have db.updateClip
+      const allClips = db.getClips();
+      const newAllClips = allClips.map(c => c.id === id ? { ...c, name, characterType } : c);
+      localStorage.setItem('dropit_clips', JSON.stringify(newAllClips));
+      setClips(updatedClips);
+      toast({ title: "Asset Updated" });
+    }
   };
 
   if (!user) return null;
@@ -105,21 +122,69 @@ export default function StudioPage() {
                     </div>
                  ) : (
                    clips.map(clip => {
-                     const CharIcon = CHARACTER_TYPES.find(ct => ct.id === clip.characterType)?.icon || Disc;
+                     const charType = CHARACTER_TYPES.find(ct => ct.id === clip.characterType) || CHARACTER_TYPES[0];
+                     const CharIcon = charType.icon;
                      return (
                        <div key={clip.id} className="group relative bg-black/40 p-6 rounded-[2rem] hover:bg-primary/5 transition-all gold-border hover:border-primary/50 flex flex-col items-center gap-4">
                           <div className="w-16 h-16 bg-neutral-800 rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform gold-border">
-                             <CharIcon className="w-9 h-9 text-primary" />
+                             <CharIcon className={cn("w-9 h-9", charType.color)} />
                           </div>
                           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-center truncate w-full px-2">{clip.name}</span>
-                          <Button 
-                            variant="destructive" 
-                            size="icon" 
-                            className="absolute -top-3 -right-3 h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-2xl"
-                            onClick={() => deleteClip(clip.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          
+                          <div className="absolute -top-3 -right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="secondary" size="icon" className="h-8 w-8 rounded-full shadow-2xl bg-primary text-black hover:bg-primary/90">
+                                  <Settings2 className="w-4 h-4" />
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="glass-panel border-primary/20 rounded-[2rem] p-10 gold-shadow">
+                                <DialogHeader>
+                                  <DialogTitle className="text-2xl font-black italic tracking-tighter text-primary uppercase">Edit Asset</DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-8 py-6">
+                                  <div className="space-y-3">
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Clip Name</Label>
+                                    <input 
+                                      defaultValue={clip.name}
+                                      onChange={(e) => clip.name = e.target.value.toUpperCase()}
+                                      className="w-full bg-black/40 border border-primary/20 rounded-2xl p-4 text-primary font-black uppercase outline-none focus:border-primary"
+                                    />
+                                  </div>
+                                  <div className="space-y-3">
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Visualizer</Label>
+                                    <div className="grid grid-cols-4 gap-4">
+                                      {CHARACTER_TYPES.map(ct => (
+                                        <button 
+                                          key={ct.id}
+                                          onClick={() => clip.characterType = ct.id}
+                                          className={cn("p-4 rounded-2xl border-2 transition-all flex justify-center", clip.characterType === ct.id ? "border-primary bg-primary/10" : "border-transparent bg-black/20")}
+                                        >
+                                          <ct.icon className={cn("w-8 h-8", ct.color)} />
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                                <DialogFooter>
+                                  <Button 
+                                    className="w-full bg-primary text-black font-black uppercase tracking-widest rounded-full h-12"
+                                    onClick={() => updateClipMetadata(clip.id, clip.name, clip.characterType)}
+                                  >
+                                    Save Changes
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                            <Button 
+                              variant="destructive" 
+                              size="icon" 
+                              className="h-8 w-8 rounded-full shadow-2xl"
+                              onClick={() => deleteClip(clip.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                        </div>
                      );
                    })
@@ -146,7 +211,7 @@ export default function StudioPage() {
                   </div>
                   <div className="flex gap-5 items-start">
                     <div className="w-8 h-8 rounded-2xl bg-black flex items-center justify-center text-xs text-primary shrink-0 font-black">03</div>
-                    <p>Extend the sequence up to 64 steps for multi-bar arrangements.</p>
+                    <p>Export your session as a high-fidelity WAV file with the download icon.</p>
                   </div>
                 </div>
              </div>

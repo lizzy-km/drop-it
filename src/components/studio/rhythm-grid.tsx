@@ -8,10 +8,8 @@ import {
   Music, 
   Save, 
   Download, 
-  Settings2, 
   Plus, 
   Trash2, 
-  Sliders, 
   Disc, 
   Loader2, 
   Zap, 
@@ -23,10 +21,11 @@ import {
   RotateCcw, 
   Scissors, 
   Timer, 
-  ArrowLeftRight,
   Settings,
   Volume1,
-  Maximize2
+  Maximize2,
+  ChevronRight,
+  Gauge
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
@@ -216,7 +215,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   const playClip = useCallback(async (clipId: string, channelIdxString: string, manualTime?: number) => {
     const settings = channelSettings[channelIdxString] || DEFAULT_CHANNEL_SETTINGS;
-    if (settings.muted && !manualTime) return; // Mute respects sequencer but not manual audition
+    if (settings.muted && !manualTime) return; 
 
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
@@ -238,7 +237,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       
       source.buffer = buffer;
 
-      // Pitch/Auto-Tune
       let finalPitch = settings.pitch;
       if (settings.autoTune > 0) {
         const semitoneFactor = Math.pow(2, 1/12);
@@ -482,6 +480,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   return (
     <div className="space-y-8">
+      {/* Studio Header Controls */}
       <div className="glass-panel p-8 rounded-[2.5rem] gold-shadow flex flex-col xl:flex-row items-center justify-between gap-8 border-primary/30">
         <div className="flex flex-col md:flex-row items-center gap-10 flex-1 w-full">
           <div className="space-y-1 flex-1">
@@ -554,13 +553,15 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         </div>
       </div>
 
+      {/* Main Track Grid */}
       <div className="glass-panel rounded-[2.5rem] p-10 gold-shadow space-y-6 overflow-x-auto border-primary/20">
         {Array.from({ length: numChannels }).map((_, chIdx) => {
           const s = channelSettings[chIdx.toString()] || DEFAULT_CHANNEL_SETTINGS;
           const selId = selectedClipsForChannel[chIdx.toString()] || '';
           return (
-            <div key={chIdx} className="flex items-center gap-10 group animate-in fade-in slide-in-from-left-4 duration-500">
-              <div className="w-[320px] shrink-0 flex items-center gap-4 bg-black/40 p-4 rounded-3xl gold-border relative">
+            <div key={chIdx} className="flex items-center gap-6 group animate-in fade-in slide-in-from-left-4 duration-500">
+              {/* Channel Strip (Quick Edit Area) */}
+              <div className="w-[380px] shrink-0 flex items-center gap-4 bg-black/40 p-4 rounded-3xl gold-border relative">
                 <div className="flex flex-col gap-2">
                   <button
                     onClick={() => { if (selId) playClip(selId, chIdx.toString(), initAudioContext().currentTime); }}
@@ -584,27 +585,42 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                   </Button>
                 </div>
 
-                <div className="flex-1 min-w-0 space-y-1">
-                  <select
-                    className="text-[10px] font-black uppercase tracking-widest bg-transparent focus:outline-none text-primary cursor-pointer hover:underline w-full truncate"
-                    value={selId}
-                    onChange={(e) => setSelectedClipsForChannel(p => ({ ...p, [chIdx.toString()]: e.target.value }))}
-                  >
-                    <option value="" className="bg-neutral-900">NO_SOUND</option>
-                    {clips.map(c => (<option key={c.id} value={c.id} className="bg-neutral-900">{c.name.toUpperCase()}</option>))}
-                  </select>
-                  <div className="flex gap-1">
-                    {CHANNEL_COLORS.map(c => (
-                      <button
-                        key={c.name}
-                        onClick={() => updateChannelSetting(chIdx, 'color', c.class)}
-                        className={cn("w-2.5 h-2.5 rounded-full border border-transparent transition-all", c.class, s.color === c.class ? "border-white scale-125" : "opacity-30 hover:opacity-50")}
-                      />
-                    ))}
+                <div className="flex-1 min-w-0 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <select
+                      className="text-[10px] font-black uppercase tracking-widest bg-transparent focus:outline-none text-primary cursor-pointer hover:underline w-full truncate"
+                      value={selId}
+                      onChange={(e) => setSelectedClipsForChannel(p => ({ ...p, [chIdx.toString()]: e.target.value }))}
+                    >
+                      <option value="" className="bg-neutral-900">NO_SOUND</option>
+                      {clips.map(c => (<option key={c.id} value={c.id} className="bg-neutral-900">{c.name.toUpperCase()}</option>))}
+                    </select>
+                    <div className="flex gap-1">
+                      {CHANNEL_COLORS.map(c => (
+                        <button
+                          key={c.name}
+                          onClick={() => updateChannelSetting(chIdx, 'color', c.class)}
+                          className={cn("w-2.5 h-2.5 rounded-full border border-transparent transition-all", c.class, s.color === c.class ? "border-white scale-125" : "opacity-30 hover:opacity-50")}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Simple Mixer Sliders */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Volume1 className="w-3 h-3 text-muted-foreground" />
+                      <Slider value={[s.volume * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'volume', v[0] / 100)} className="h-1 flex-1" />
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Gauge className="w-3 h-3 text-muted-foreground" />
+                      <Slider value={[s.pitch * 50]} min={25} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pitch', v[0] / 50)} className="h-1 flex-1" />
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1">
+                  {/* Advanced Sampler Dialog */}
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10">
@@ -627,15 +643,15 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                       </DialogHeader>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 overflow-y-auto max-h-[60vh] pr-4 custom-scrollbar">
-                        {/* Basic Gain & Pan */}
+                        {/* Basic Controls Group */}
                         <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5 gold-border">
                           <h4 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
-                            <Volume1 className="w-4 h-4" /> Basic Gain & Panning
+                            <Volume1 className="w-4 h-4" /> Gain & Panning
                           </h4>
                           <div className="space-y-6">
                             <div className="space-y-3">
                               <div className="flex justify-between text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                                <span>Gain</span><span>{Math.round(s.volume * 100)}%</span>
+                                <span>Volume</span><span>{Math.round(s.volume * 100)}%</span>
                               </div>
                               <Slider value={[s.volume * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'volume', v[0] / 100)} className="h-2" />
                             </div>
@@ -648,37 +664,37 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                           </div>
                         </div>
 
-                        {/* Sample Modification */}
+                        {/* Sample Modification Group */}
                         <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5 gold-border">
                           <h4 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
-                            <Scissors className="w-4 h-4" /> Sample Modification
+                            <Scissors className="w-4 h-4" /> Trim & Edit
                           </h4>
                           <div className="space-y-6">
                             <div className="flex items-center justify-between p-4 bg-black/20 rounded-2xl border border-white/5">
                               <Label className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-2">
-                                <RotateCcw className="w-4 h-4" /> Reverse Sample
+                                <RotateCcw className="w-4 h-4" /> Reverse
                               </Label>
                               <Switch checked={s.reversed} onCheckedChange={(v) => updateChannelSetting(chIdx, 'reversed', v)} />
                             </div>
                             <div className="space-y-3">
                               <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground tracking-widest">
-                                <span>Trim Start</span><span>{Math.round(s.trimStart * 100)}%</span>
+                                <span>Start</span><span>{Math.round(s.trimStart * 100)}%</span>
                               </div>
                               <Slider value={[s.trimStart * 100]} min={0} max={s.trimEnd * 100 - 1} onValueChange={(v) => updateChannelSetting(chIdx, 'trimStart', v[0] / 100)} className="h-2" />
                             </div>
                             <div className="space-y-3">
                               <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground tracking-widest">
-                                <span>Trim End</span><span>{Math.round(s.trimEnd * 100)}%</span>
+                                <span>End</span><span>{Math.round(s.trimEnd * 100)}%</span>
                               </div>
                               <Slider value={[s.trimEnd * 100]} min={s.trimStart * 100 + 1} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'trimEnd', v[0] / 100)} className="h-2" />
                             </div>
                           </div>
                         </div>
 
-                        {/* Envelope (ADSR) */}
+                        {/* Envelope (ADSR) Group */}
                         <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5 gold-border">
                           <h4 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
-                            <Timer className="w-4 h-4" /> Envelope (ADSR)
+                            <Timer className="w-4 h-4" /> ADSR Envelope
                           </h4>
                           <div className="space-y-6">
                             <div className="space-y-3">
@@ -696,10 +712,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                           </div>
                         </div>
 
-                        {/* Effects Rack */}
+                        {/* Effects Rack Group */}
                         <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5 lg:col-span-3 gold-border">
                           <h4 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
-                            <Sparkles className="w-4 h-4" /> Audio Effects Rack
+                            <Sparkles className="w-4 h-4" /> Effects Rack
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                             <div className="space-y-3">
@@ -717,13 +733,13 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                             </div>
                             <div className="space-y-3">
                               <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                <span>Filter (Cutoff)</span><span>{Math.round(s.cutoff * 100)}%</span>
+                                <span>Filter</span><span>{Math.round(s.cutoff * 100)}%</span>
                               </div>
                               <Slider value={[s.cutoff * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'cutoff', v[0] / 100)} className="h-2" />
                             </div>
                             <div className="space-y-3">
                               <div className="flex justify-between text-[9px] font-black uppercase text-primary/80">
-                                <span className="flex items-center gap-1"><Waves className="w-3 h-3" /> Drive (Distortion)</span>
+                                <span className="flex items-center gap-1"><Waves className="w-3 h-3" /> Drive</span>
                                 <span>{Math.round(s.distortion * 100)}%</span>
                               </div>
                               <Slider value={[s.distortion * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'distortion', v[0] / 100)} className="h-2 accent-primary" />
@@ -751,6 +767,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 </div>
               </div>
 
+              {/* Step Buttons Area */}
               <div className="flex-1 flex gap-2 h-20 py-1 overflow-x-auto custom-scrollbar">
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const clipIds = grid[`${chIdx}-${stepIdx}`] || [];
@@ -794,7 +811,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
           onClick={addChannel}
         >
           <Plus className="w-5 h-5 text-primary group-hover:scale-125 duration-300" />
-          <span className="font-black uppercase tracking-[0.4em] text-[10px] text-muted-foreground group-hover:text-primary">New Track</span>
+          <span className="font-black uppercase tracking-[0.4em] text-[10px] text-muted-foreground group-hover:text-primary">Add Track</span>
         </Button>
       </div>
     </div>
