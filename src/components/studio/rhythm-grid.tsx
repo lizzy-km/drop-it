@@ -1,15 +1,39 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Music, Save, Download, Settings2, Plus, Trash2, Sliders, Disc, Loader2, Zap, Waves, Sparkles, Mic2, VolumeX, Volume2, RotateCcw, Scissors, Timer, ArrowLeftRight } from 'lucide-react';
+import { 
+  Play, 
+  Square, 
+  Music, 
+  Save, 
+  Download, 
+  Settings2, 
+  Plus, 
+  Trash2, 
+  Sliders, 
+  Disc, 
+  Loader2, 
+  Zap, 
+  Waves, 
+  Sparkles, 
+  Mic2, 
+  VolumeX, 
+  Volume2, 
+  RotateCcw, 
+  Scissors, 
+  Timer, 
+  ArrowLeftRight,
+  Settings,
+  Volume1,
+  Maximize2
+} from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { Slider } from '@/components/ui/slider';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 
@@ -192,7 +216,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   const playClip = useCallback(async (clipId: string, channelIdxString: string, manualTime?: number) => {
     const settings = channelSettings[channelIdxString] || DEFAULT_CHANNEL_SETTINGS;
-    if (settings.muted) return;
+    if (settings.muted && !manualTime) return; // Mute respects sequencer but not manual audition
 
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
@@ -234,7 +258,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         distortionNode.oversample = '4x';
       }
 
-      // Envelope Logic (ADSR simplified to Attack/Release)
       const now = ctx.currentTime;
       const startTime = manualTime || now;
       gainNode.gain.setValueAtTime(0, startTime);
@@ -245,7 +268,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const trimEnd = settings.trimEnd * buffer.duration;
       const playDuration = Math.max(0, trimEnd - trimStart) / finalPitch;
       
-      // Schedule Release
       const releaseStartTime = startTime + playDuration - settings.release;
       gainNode.gain.setValueAtTime(settings.volume, Math.max(startTime + settings.attack, releaseStartTime));
       gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + playDuration);
@@ -541,7 +563,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               <div className="w-[320px] shrink-0 flex items-center gap-4 bg-black/40 p-4 rounded-3xl gold-border relative">
                 <div className="flex flex-col gap-2">
                   <button
-                    onClick={() => { if (selId) playClip(selId, chIdx.toString()); }}
+                    onClick={() => { if (selId) playClip(selId, chIdx.toString(), initAudioContext().currentTime); }}
                     className={cn(
                       "w-12 h-12 rounded-xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 shadow-lg shrink-0", 
                       s.muted ? "bg-neutral-800" : s.color
@@ -583,97 +605,145 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 </div>
 
                 <div className="flex items-center gap-1">
-                  <Popover>
-                    <PopoverTrigger asChild>
+                  <Dialog>
+                    <DialogTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10">
-                        <Sliders className="w-4 h-4" />
+                        <Maximize2 className="w-4 h-4" />
                       </Button>
-                    </PopoverTrigger>
-                    <PopoverContent side="right" className="w-80 glass-panel p-6 rounded-[2rem] gold-border space-y-6">
-                      <div className="space-y-6">
+                    </DialogTrigger>
+                    <DialogContent className="max-w-4xl glass-panel border-primary/20 rounded-[2.5rem] p-10 gold-shadow overflow-hidden">
+                      <DialogHeader className="mb-8">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-primary">
-                            <Settings2 className="w-4 h-4" />
-                            <span className="text-[10px] font-black uppercase tracking-widest">Mixer Rack</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                             <Label className="text-[9px] font-black uppercase text-muted-foreground">Mute</Label>
-                             <Switch checked={s.muted} onCheckedChange={(v) => updateChannelSetting(chIdx, 'muted', v)} />
+                          <DialogTitle className="text-4xl font-black italic tracking-tighter text-primary flex items-center gap-4">
+                            <Settings className="w-8 h-8" /> SAMPLER_EDITOR
+                          </DialogTitle>
+                          <Button 
+                            className="bg-primary text-black font-black uppercase tracking-widest rounded-full h-12 px-8 hover:bg-primary/90"
+                            onClick={() => { if (selId) playClip(selId, chIdx.toString(), initAudioContext().currentTime); }}
+                          >
+                            <Volume2 className="w-4 h-4 mr-2" /> Audition
+                          </Button>
+                        </div>
+                      </DialogHeader>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 overflow-y-auto max-h-[60vh] pr-4 custom-scrollbar">
+                        {/* Basic Gain & Pan */}
+                        <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5 gold-border">
+                          <h4 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                            <Volume1 className="w-4 h-4" /> Basic Gain & Panning
+                          </h4>
+                          <div className="space-y-6">
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                                <span>Gain</span><span>{Math.round(s.volume * 100)}%</span>
+                              </div>
+                              <Slider value={[s.volume * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'volume', v[0] / 100)} className="h-2" />
+                            </div>
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                                <span>Pan</span><span>{s.pan < 0 ? 'L' : s.pan > 0 ? 'R' : 'C'} {Math.abs(Math.round(s.pan * 100))}%</span>
+                              </div>
+                              <Slider value={[(s.pan + 1) * 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pan', (v[0] / 50) - 1)} className="h-2" />
+                            </div>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-6">
-                           <div className="space-y-4 bg-black/40 p-4 rounded-2xl border border-white/5">
-                             <h4 className="text-[8px] font-black uppercase text-primary/60 tracking-widest flex items-center gap-2"><Disc className="w-3 h-3" /> Basic Gain & Panning</h4>
-                             <div className="space-y-4">
-                               <div className="space-y-2">
-                                 <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-muted-foreground"><span>Gain</span><span>{Math.round(s.volume * 100)}%</span></div>
-                                 <Slider value={[s.volume * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'volume', v[0] / 100)} className="h-1.5" />
-                               </div>
-                               <div className="space-y-2">
-                                 <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-muted-foreground"><span>Pan</span><span>{s.pan < 0 ? 'L' : s.pan > 0 ? 'R' : 'C'} {Math.abs(Math.round(s.pan * 100))}%</span></div>
-                                 <Slider value={[(s.pan + 1) * 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pan', (v[0] / 50) - 1)} className="h-1.5" />
-                               </div>
-                             </div>
-                           </div>
+                        {/* Sample Modification */}
+                        <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5 gold-border">
+                          <h4 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                            <Scissors className="w-4 h-4" /> Sample Modification
+                          </h4>
+                          <div className="space-y-6">
+                            <div className="flex items-center justify-between p-4 bg-black/20 rounded-2xl border border-white/5">
+                              <Label className="text-[10px] font-black uppercase text-muted-foreground flex items-center gap-2">
+                                <RotateCcw className="w-4 h-4" /> Reverse Sample
+                              </Label>
+                              <Switch checked={s.reversed} onCheckedChange={(v) => updateChannelSetting(chIdx, 'reversed', v)} />
+                            </div>
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground tracking-widest">
+                                <span>Trim Start</span><span>{Math.round(s.trimStart * 100)}%</span>
+                              </div>
+                              <Slider value={[s.trimStart * 100]} min={0} max={s.trimEnd * 100 - 1} onValueChange={(v) => updateChannelSetting(chIdx, 'trimStart', v[0] / 100)} className="h-2" />
+                            </div>
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground tracking-widest">
+                                <span>Trim End</span><span>{Math.round(s.trimEnd * 100)}%</span>
+                              </div>
+                              <Slider value={[s.trimEnd * 100]} min={s.trimStart * 100 + 1} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'trimEnd', v[0] / 100)} className="h-2" />
+                            </div>
+                          </div>
+                        </div>
 
-                           <div className="space-y-4 bg-black/40 p-4 rounded-2xl border border-white/5">
-                             <h4 className="text-[8px] font-black uppercase text-primary/60 tracking-widest flex items-center gap-2"><Scissors className="w-3 h-3" /> Sampler Editor</h4>
-                             <div className="space-y-5">
-                               <div className="flex items-center justify-between">
-                                  <Label className="text-[9px] font-black uppercase text-muted-foreground flex items-center gap-2"><RotateCcw className="w-3 h-3" /> Reverse Sample</Label>
-                                  <Switch checked={s.reversed} onCheckedChange={(v) => updateChannelSetting(chIdx, 'reversed', v)} />
-                               </div>
-                               <div className="space-y-2">
-                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Trim Start</span><span>{Math.round(s.trimStart * 100)}%</span></div>
-                                 <Slider value={[s.trimStart * 100]} min={0} max={s.trimEnd * 100 - 1} onValueChange={(v) => updateChannelSetting(chIdx, 'trimStart', v[0] / 100)} className="h-1.5" />
-                               </div>
-                               <div className="space-y-2">
-                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Trim End</span><span>{Math.round(s.trimEnd * 100)}%</span></div>
-                                 <Slider value={[s.trimEnd * 100]} min={s.trimStart * 100 + 1} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'trimEnd', v[0] / 100)} className="h-1.5" />
-                               </div>
-                               <div className="grid grid-cols-2 gap-4">
-                                  <div className="space-y-2">
-                                    <div className="text-[8px] font-black uppercase text-muted-foreground flex items-center gap-1"><Timer className="w-3 h-3" /> Attack</div>
-                                    <Slider value={[s.attack * 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'attack', v[0] / 50)} className="h-1.5" />
-                                  </div>
-                                  <div className="space-y-2">
-                                    <div className="text-[8px] font-black uppercase text-muted-foreground flex items-center gap-1"><Timer className="w-3 h-3" /> Release</div>
-                                    <Slider value={[s.release * 50]} min={0.5} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'release', v[0] / 50)} className="h-1.5" />
-                                  </div>
-                               </div>
-                             </div>
-                           </div>
+                        {/* Envelope (ADSR) */}
+                        <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5 gold-border">
+                          <h4 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                            <Timer className="w-4 h-4" /> Envelope (ADSR)
+                          </h4>
+                          <div className="space-y-6">
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                                <span>Attack</span><span>{(s.attack).toFixed(2)}s</span>
+                              </div>
+                              <Slider value={[s.attack * 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'attack', v[0] / 50)} className="h-2" />
+                            </div>
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                                <span>Release</span><span>{(s.release).toFixed(2)}s</span>
+                              </div>
+                              <Slider value={[s.release * 50]} min={0.5} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'release', v[0] / 50)} className="h-2" />
+                            </div>
+                          </div>
+                        </div>
 
-                           <div className="space-y-4 bg-black/40 p-4 rounded-2xl border border-white/5">
-                             <h4 className="text-[8px] font-black uppercase text-primary/60 tracking-widest flex items-center gap-2"><Waves className="w-3 h-3" /> Effects Rack</h4>
-                             <div className="space-y-4">
-                               <div className="space-y-2">
-                                 <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-primary/80"><span className="flex items-center gap-1"><Mic2 className="w-3 h-3" /> Auto-Tune</span><span>{Math.round(s.autoTune * 100)}%</span></div>
-                                 <Slider value={[s.autoTune * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'autoTune', v[0] / 100)} className="h-1.5 accent-primary" />
-                               </div>
-                               <div className="space-y-2">
-                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Pitch</span><span>{s.pitch.toFixed(1)}x</span></div>
-                                 <Slider value={[s.pitch * 50]} min={25} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pitch', v[0] / 50)} className="h-1.5" />
-                               </div>
-                               <div className="space-y-2">
-                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Filter</span><span>{Math.round(s.cutoff * 100)}%</span></div>
-                                 <Slider value={[s.cutoff * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'cutoff', v[0] / 100)} className="h-1.5" />
-                               </div>
-                               <div className="space-y-2">
-                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-primary/80"><span className="flex items-center gap-1"><Waves className="w-3 h-3" /> Drive</span><span>{Math.round(s.distortion * 100)}%</span></div>
-                                 <Slider value={[s.distortion * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'distortion', v[0] / 100)} className="h-1.5 accent-primary" />
-                               </div>
-                               <div className="space-y-2">
-                                 <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span className="flex items-center gap-1"><Sparkles className="w-3 h-3" /> Space</span><span>{Math.round(s.reverb * 100)}%</span></div>
-                                 <Slider value={[s.reverb * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'reverb', v[0] / 100)} className="h-1.5" />
-                               </div>
-                             </div>
-                           </div>
+                        {/* Effects Rack */}
+                        <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5 lg:col-span-3 gold-border">
+                          <h4 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                            <Sparkles className="w-4 h-4" /> Audio Effects Rack
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-[9px] font-black uppercase text-primary/80">
+                                <span className="flex items-center gap-1"><Mic2 className="w-3 h-3" /> Auto-Tune</span>
+                                <span>{Math.round(s.autoTune * 100)}%</span>
+                              </div>
+                              <Slider value={[s.autoTune * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'autoTune', v[0] / 100)} className="h-2 accent-primary" />
+                            </div>
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                <span>Pitch</span><span>{s.pitch.toFixed(1)}x</span>
+                              </div>
+                              <Slider value={[s.pitch * 50]} min={25} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pitch', v[0] / 50)} className="h-2" />
+                            </div>
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                <span>Filter (Cutoff)</span><span>{Math.round(s.cutoff * 100)}%</span>
+                              </div>
+                              <Slider value={[s.cutoff * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'cutoff', v[0] / 100)} className="h-2" />
+                            </div>
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-[9px] font-black uppercase text-primary/80">
+                                <span className="flex items-center gap-1"><Waves className="w-3 h-3" /> Drive (Distortion)</span>
+                                <span>{Math.round(s.distortion * 100)}%</span>
+                              </div>
+                              <Slider value={[s.distortion * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'distortion', v[0] / 100)} className="h-2 accent-primary" />
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </PopoverContent>
-                  </Popover>
+
+                      <DialogFooter className="mt-10 border-t border-white/10 pt-8">
+                        <Button 
+                          className="bg-primary text-black font-black uppercase tracking-[0.3em] rounded-full h-14 w-full md:w-auto px-12 shadow-2xl hover:bg-primary/90"
+                          onClick={() => {
+                            toast({ title: "Modifications Saved", description: "All sampler parameters committed to track memory." });
+                          }}
+                        >
+                          <Save className="w-5 h-5 mr-3" /> Commit Changes
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
 
                   <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => removeChannel(chIdx)}>
                     <Trash2 className="w-4 h-4" />
