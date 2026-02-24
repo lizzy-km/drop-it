@@ -23,6 +23,7 @@ export interface ChannelSettings {
   reverb: number; // 0 to 1 (room size/wetness)
   pan: number; // -1 to 1
   cutoff: number; // 0 to 1
+  distortion: number; // 0 to 1 (drive)
   color: string; // Hex or tailwind class color
 }
 

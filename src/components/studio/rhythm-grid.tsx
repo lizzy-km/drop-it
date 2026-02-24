@@ -1,8 +1,9 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Play, Square, Music, Save, Download, Settings2, Plus, Trash2, Sliders, Disc, Loader2 } from 'lucide-react';
+import { Play, Square, Music, Save, Download, Settings2, Plus, Trash2, Sliders, Disc, Loader2, Zap, Waves } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
@@ -28,6 +29,7 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   reverb: 0,
   pan: 0,
   cutoff: 1.0,
+  distortion: 0,
   color: 'bg-primary',
 };
 
@@ -43,48 +45,59 @@ function audioBufferToWav(buffer: AudioBuffer) {
   let offset = 0;
   let pos = 0;
 
-  // write WAVE header
+  const setUint16 = (data: number) => {
+    view.setUint16(pos, data, true);
+    pos += 2;
+  };
+
+  const setUint32 = (data: number) => {
+    view.setUint32(pos, data, true);
+    pos += 4;
+  };
+
   setUint32(0x46464952); // "RIFF"
-  setUint32(length - 8); // file length - 8
+  setUint32(length - 8); 
   setUint32(0x45564157); // "WAVE"
 
   setUint32(0x20746d66); // "fmt " chunk
-  setUint32(16); // length = 16
-  setUint16(1); // PCM (uncompressed)
+  setUint32(16); 
+  setUint16(1); 
   setUint16(numOfChan);
   setUint32(buffer.sampleRate);
-  setUint32(buffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
-  setUint16(numOfChan * 2); // block-align
-  setUint16(16); // 16-bit (hardcoded)
+  setUint32(buffer.sampleRate * 2 * numOfChan); 
+  setUint16(numOfChan * 2); 
+  setUint16(16); 
 
-  setUint32(0x61746164); // "data" - chunk
-  setUint32(length - pos - 4); // chunk length
+  setUint32(0x61746164); // "data" chunk
+  setUint32(length - pos - 4); 
 
-  // write interleaved data
   for (i = 0; i < buffer.numberOfChannels; i++)
     channels.push(buffer.getChannelData(i));
 
   while (pos < length) {
     for (i = 0; i < numOfChan; i++) {
-      sample = Math.max(-1, Math.min(1, channels[i][offset])); // clamp
-      sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0; // scale to 16nd-bit signed int
-      view.setInt16(pos, sample, true); // write 16nd-bit sample
+      sample = Math.max(-1, Math.min(1, channels[i][offset])); 
+      sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0; 
+      view.setInt16(pos, sample, true); 
       pos += 2;
     }
     offset++;
   }
 
   return new Blob([bufferArray], { type: "audio/wav" });
+}
 
-  function setUint16(data: number) {
-    view.setUint16(pos, data, true);
-    pos += 2;
+// Helper to create distortion curve
+function makeDistortionCurve(amount: number) {
+  const k = amount * 100;
+  const n_samples = 44100;
+  const curve = new Float32Array(n_samples);
+  const deg = Math.PI / 180;
+  for (let i = 0; i < n_samples; ++i) {
+    const x = (i * 2) / n_samples - 1;
+    curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
   }
-
-  function setUint32(data: number) {
-    view.setUint32(pos, data, true);
-    pos += 4;
-  }
+  return curve;
 }
 
 export function RhythmGrid({ user, clips, track, onSaveTrack }: {
@@ -113,10 +126,23 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioBuffersRef = useRef<Record<string, AudioBuffer>>({});
+  const masterCompressorRef = useRef<DynamicsCompressorNode | null>(null);
 
   const initAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Setup Master Compressor
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-24, ctx.currentTime);
+      compressor.knee.setValueAtTime(40, ctx.currentTime);
+      compressor.ratio.setValueAtTime(12, ctx.currentTime);
+      compressor.attack.setValueAtTime(0, ctx.currentTime);
+      compressor.release.setValueAtTime(0.25, ctx.currentTime);
+      compressor.connect(ctx.destination);
+      
+      masterCompressorRef.current = compressor;
+      audioContextRef.current = ctx;
     }
     return audioContextRef.current;
   }, []);
@@ -149,6 +175,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const gainNode = ctx.createGain();
       const panNode = ctx.createStereoPanner();
       const filterNode = ctx.createBiquadFilter();
+      const distortionNode = ctx.createWaveShaper();
       
       source.buffer = buffer;
       source.playbackRate.value = settings.pitch;
@@ -156,11 +183,18 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       panNode.pan.value = settings.pan || 0;
       filterNode.type = 'lowpass';
       filterNode.frequency.value = 200 + (Math.pow(settings.cutoff, 2) * 19800);
+      
+      if (settings.distortion > 0) {
+        distortionNode.curve = makeDistortionCurve(settings.distortion);
+        distortionNode.oversample = '4x';
+      }
 
-      source.connect(filterNode);
+      // Routing: Source -> Distortion -> Filter -> Gain -> Pan -> Master Compressor
+      source.connect(distortionNode);
+      distortionNode.connect(filterNode);
       filterNode.connect(gainNode);
       gainNode.connect(panNode);
-      panNode.connect(ctx.destination);
+      panNode.connect(masterCompressorRef.current || ctx.destination);
 
       source.start();
     } catch (error) {
@@ -174,18 +208,26 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     
     try {
       const stepDuration = (60 / bpm) / 4;
-      const totalDuration = numSteps * stepDuration;
+      const totalDuration = numSteps * stepDuration + 2; // Extra 2s for tails
       const sampleRate = 44100;
       const offlineCtx = new OfflineAudioContext(2, Math.ceil(sampleRate * totalDuration), sampleRate);
 
-      // Pre-load all used buffers into the offline context
+      // Pre-load all used buffers
       const uniqueUsedClipIds = new Set(Object.values(grid).flat());
       for (const id of uniqueUsedClipIds) {
         const clip = clips.find(c => c.id === id);
         if (clip) await loadAudio(clip, offlineCtx);
       }
 
-      // Schedule all active cells
+      // Setup Master Compressor for Offline context
+      const compressor = offlineCtx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-24, offlineCtx.currentTime);
+      compressor.knee.setValueAtTime(40, offlineCtx.currentTime);
+      compressor.ratio.setValueAtTime(12, offlineCtx.currentTime);
+      compressor.attack.setValueAtTime(0, offlineCtx.currentTime);
+      compressor.release.setValueAtTime(0.25, offlineCtx.currentTime);
+      compressor.connect(offlineCtx.destination);
+
       for (let ch = 0; ch < numChannels; ch++) {
         const settings = channelSettings[ch.toString()] || DEFAULT_CHANNEL_SETTINGS;
         for (let st = 0; st < numSteps; st++) {
@@ -202,6 +244,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               const gainNode = offlineCtx.createGain();
               const panNode = offlineCtx.createStereoPanner();
               const filterNode = offlineCtx.createBiquadFilter();
+              const distortionNode = offlineCtx.createWaveShaper();
 
               source.buffer = buffer;
               source.playbackRate.value = settings.pitch;
@@ -210,10 +253,16 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               filterNode.type = 'lowpass';
               filterNode.frequency.value = 200 + (Math.pow(settings.cutoff, 2) * 19800);
 
-              source.connect(filterNode);
+              if (settings.distortion > 0) {
+                distortionNode.curve = makeDistortionCurve(settings.distortion);
+                distortionNode.oversample = '4x';
+              }
+
+              source.connect(distortionNode);
+              distortionNode.connect(filterNode);
               filterNode.connect(gainNode);
               gainNode.connect(panNode);
-              panNode.connect(offlineCtx.destination);
+              panNode.connect(compressor);
 
               source.start(st * stepDuration);
             }
@@ -232,7 +281,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       link.click();
       document.body.removeChild(link);
       
-      toast({ title: "Export Complete", description: "Your high-quality .wav file is ready!" });
+      toast({ title: "Export Complete", description: "Your master .wav is ready!" });
     } catch (err) {
       console.error(err);
       toast({ title: "Export Failed", variant: "destructive" });
@@ -406,7 +455,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
           const selId = selectedClipsForChannel[chIdx.toString()] || '';
           return (
             <div key={chIdx} className="flex items-center gap-10 group animate-in fade-in slide-in-from-left-4 duration-500">
-              {/* Simplified Channel Strip */}
+              {/* Channel Strip */}
               <div className="w-[280px] shrink-0 flex items-center gap-4 bg-black/40 p-4 rounded-3xl gold-border">
                 <button
                   onClick={() => { if (selId) playClip(selId, chIdx.toString()); }}
@@ -442,13 +491,13 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                         <Sliders className="w-4 h-4" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent side="right" className="w-64 glass-panel p-6 rounded-[2rem] gold-border space-y-6">
+                    <PopoverContent side="right" className="w-72 glass-panel p-6 rounded-[2rem] gold-border space-y-6">
                       <div className="space-y-4">
                         <div className="flex items-center gap-2 text-primary">
                           <Settings2 className="w-4 h-4" />
-                          <span className="text-[10px] font-black uppercase tracking-widest">Mixer Controls</span>
+                          <span className="text-[10px] font-black uppercase tracking-widest">Mixer Rack</span>
                         </div>
-                        <div className="space-y-5">
+                        <div className="space-y-4">
                           <div className="space-y-2">
                             <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-muted-foreground"><span>Gain</span><span>{Math.round(s.volume * 100)}%</span></div>
                             <Slider value={[s.volume * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'volume', v[0] / 100)} className="h-1.5" />
@@ -462,12 +511,18 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                             <Slider value={[s.cutoff * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'cutoff', v[0] / 100)} className="h-1.5" />
                           </div>
                           <div className="space-y-2">
-                            <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Pan</span><span>{s.pan > 0 ? `R${Math.abs(Math.round(s.pan * 100))}` : s.pan < 0 ? `L${Math.abs(Math.round(s.pan * 100))}` : 'C'}</span></div>
-                            <Slider value={[(s.pan + 1) * 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pan', (v[0] / 50) - 1)} className="h-1.5" />
+                            <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-primary/80"><span className="flex items-center gap-1"><Waves className="w-3 h-3" /> Drive</span><span>{Math.round(s.distortion * 100)}%</span></div>
+                            <Slider value={[s.distortion * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'distortion', v[0] / 100)} className="h-1.5 accent-primary" />
                           </div>
-                          <div className="space-y-2">
-                            <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-muted-foreground"><span>Reverb</span><span>{Math.round(s.reverb * 100)}%</span></div>
-                            <Slider value={[s.reverb * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'reverb', v[0] / 100)} className="h-1.5" />
+                          <div className="grid grid-cols-2 gap-4 pt-2">
+                            <div className="space-y-2">
+                              <div className="text-[8px] font-black uppercase text-muted-foreground">Pan</div>
+                              <Slider value={[(s.pan + 1) * 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'pan', (v[0] / 50) - 1)} className="h-1.5" />
+                            </div>
+                            <div className="space-y-2">
+                              <div className="text-[8px] font-black uppercase text-muted-foreground">Space</div>
+                              <Slider value={[s.reverb * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'reverb', v[0] / 100)} className="h-1.5" />
+                            </div>
                           </div>
                         </div>
                       </div>
