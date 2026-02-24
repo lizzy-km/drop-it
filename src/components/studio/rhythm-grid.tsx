@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -104,7 +103,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const delayNode = ctx.createDelay(1.0);
       const delayGain = ctx.createGain();
 
-      // Reverb Simulation Chain (Simulated with short dense delay)
+      // Reverb Simulation Chain
       const reverbNode = ctx.createDelay(0.1);
       const reverbGain = ctx.createGain();
 
@@ -133,9 +132,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         delayGain.connect(panNode);
       }
 
-      // Reverb Routing (Simulated)
+      // Reverb Routing
       if (settings.reverb > 0) {
-        reverbNode.delayTime.value = 0.05; // Short "room" reflections
+        reverbNode.delayTime.value = 0.05;
         reverbGain.gain.value = settings.reverb * 0.5;
 
         gainNode.connect(reverbNode);
@@ -347,18 +346,33 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         <div className="space-y-10 w-full " >
           {Array.from({ length: numChannels }).map((_, channelIdx) => {
             const settings = channelSettings[channelIdx.toString()] || DEFAULT_CHANNEL_SETTINGS;
+            const selectedClipId = selectedClipsForChannel[channelIdx.toString()] || '';
 
             return (
               <div key={channelIdx} className="flex items-start gap-10 group animate-in fade-in slide-in-from-left-4">
                 <div className="w-[30%] flex flex-col gap-5 pr-8 border-r shrink-0 relative">
                   <div className="  w-[80%] flex items-center justify-between">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-inner", settings.color, "bg-opacity-20")}>
+                      <button
+                        title="Audition Sound"
+                        onClick={() => {
+                          if (selectedClipId) {
+                            playClip(selectedClipId, channelIdx.toString());
+                          } else {
+                            toast({ title: "Select a sound first!" });
+                          }
+                        }}
+                        className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-inner hover:scale-110 active:scale-95 transition-all",
+                          settings.color, 
+                          "bg-opacity-20"
+                        )}
+                      >
                         <Music className={cn("w-5 h-5", settings.color.replace('bg-', 'text-'))} />
-                      </div>
+                      </button>
                       <select
                         className="text-xs bg-transparent focus:outline-none font-black text-primary truncate w-full cursor-pointer hover:underline uppercase tracking-widest"
-                        value={selectedClipsForChannel[channelIdx.toString()] || ''}
+                        value={selectedClipId}
                         onChange={(e) => {
                           setSelectedClipsForChannel(prev => ({
                             ...prev,
