@@ -164,10 +164,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       
       const compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.setValueAtTime(-24, ctx.currentTime);
-      compressor.knee.setValueAtTime(40, ctx.currentTime);
-      compressor.ratio.setValueAtTime(12, ctx.currentTime);
-      compressor.attack.setValueAtTime(0, ctx.currentTime);
+      compressor.threshold.setValueAtTime(-12, ctx.currentTime);
+      compressor.knee.setValueAtTime(30, ctx.currentTime);
+      compressor.ratio.setValueAtTime(4, ctx.currentTime);
+      compressor.attack.setValueAtTime(0.003, ctx.currentTime);
       compressor.release.setValueAtTime(0.25, ctx.currentTime);
       compressor.connect(ctx.destination);
       
@@ -299,12 +299,17 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       }
 
       const compressor = offlineCtx.createDynamicsCompressor();
-      compressor.threshold.setValueAtTime(-24, offlineCtx.currentTime);
-      compressor.knee.setValueAtTime(40, offlineCtx.currentTime);
-      compressor.ratio.setValueAtTime(12, offlineCtx.currentTime);
-      compressor.attack.setValueAtTime(0, offlineCtx.currentTime);
+      compressor.threshold.setValueAtTime(-12, offlineCtx.currentTime);
+      compressor.knee.setValueAtTime(30, offlineCtx.currentTime);
+      compressor.ratio.setValueAtTime(4, offlineCtx.currentTime);
+      compressor.attack.setValueAtTime(0.003, offlineCtx.currentTime);
       compressor.release.setValueAtTime(0.25, offlineCtx.currentTime);
-      compressor.connect(offlineCtx.destination);
+
+      const masterBoost = offlineCtx.createGain();
+      masterBoost.gain.setValueAtTime(1.5, offlineCtx.currentTime); // Professional makeup gain for export
+
+      compressor.connect(masterBoost);
+      masterBoost.connect(offlineCtx.destination);
 
       for (let ch = 0; ch < numChannels; ch++) {
         const settings = channelSettings[ch.toString()] || DEFAULT_CHANNEL_SETTINGS;
@@ -386,7 +391,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       link.click();
       document.body.removeChild(link);
       
-      toast({ title: "Export Complete", description: "Your master .wav is ready!" });
+      toast({ title: "Export Complete", description: "Your master .wav is ready with optimized volume!" });
     } catch (err) {
       console.error(err);
       toast({ title: "Export Failed", variant: "destructive" });
