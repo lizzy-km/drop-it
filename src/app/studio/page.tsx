@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState, Suspense } from 'react';
@@ -51,7 +52,7 @@ function StudioContent() {
     const allClips = db.getClips();
     const newAllClips = allClips.map(c => c.id === id ? { ...c, name, characterType } : c);
     localStorage.setItem('dropit_clips', JSON.stringify(newAllClips));
-    setClips(newAllClips.filter(c => user && c.userId === user.id));
+    if (user) setClips(newAllClips.filter(c => c.userId === user.id));
     toast({ title: "Asset Updated" });
   };
 
@@ -157,10 +158,7 @@ function StudioContent() {
                                         <button 
                                           key={ct.id}
                                           onClick={() => {
-                                             const allClips = db.getClips();
-                                             const updated = allClips.map(c => c.id === clip.id ? { ...c, characterType: ct.id } : c);
-                                             localStorage.setItem('dropit_clips', JSON.stringify(updated));
-                                             setClips(updated.filter(c => user && c.userId === user.id));
+                                             updateClipMetadata(clip.id, clip.name, ct.id);
                                           }}
                                           className={cn("p-4 rounded-2xl border-2 transition-all flex justify-center", clip.characterType === ct.id ? "border-primary bg-primary/10" : "border-transparent bg-black/20")}
                                         >
