@@ -704,13 +704,13 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                           <div className="space-y-6">
                             <div className="space-y-3">
                               <div className="flex justify-between text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                                <span>Attack</span><span>{(s.attack).toFixed(2)}s</span>
+                                <span>Attack</span><span>{(s.attack)?.toFixed(2)}s</span>
                               </div>
                               <Slider value={[s.attack * 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'attack', v[0] / 50)} className="h-2" />
                             </div>
                             <div className="space-y-3">
                               <div className="flex justify-between text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                                <span>Release</span><span>{(s.release).toFixed(2)}s</span>
+                                <span>Release</span><span>{(s.release)?.toFixed(2)}s</span>
                               </div>
                               <Slider value={[s.release * 50]} min={0.5} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'release', v[0] / 50)} className="h-2" />
                             </div>
