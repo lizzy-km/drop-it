@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState } from 'react';
@@ -41,10 +40,10 @@ export default function StudioPage() {
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Header */}
-      <header className="bg-white border-b px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+      <header className="bg-card border-b px-6 py-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-4">
           <Link href="/">
-            <Button variant="ghost" size="icon" className="rounded-full">
+            <Button variant="ghost" size="icon" className="rounded-full text-foreground hover:bg-muted">
               <ChevronLeft className="w-6 h-6" />
             </Button>
           </Link>
@@ -59,7 +58,7 @@ export default function StudioPage() {
 
         <div className="flex items-center gap-2">
           <Link href="/browse">
-            <Button variant="ghost" className="rounded-full font-bold gap-2 text-primary">
+            <Button variant="ghost" className="rounded-full font-bold gap-2 text-primary hover:bg-primary/10">
               <Share2 className="w-4 h-4" /> Discover
             </Button>
           </Link>
@@ -80,7 +79,7 @@ export default function StudioPage() {
               <AudioUploader user={user} onClipSaved={refreshClips} />
             </div>
 
-            <div className="bg-white rounded-2xl p-6 shadow-sm border">
+            <div className="bg-card rounded-2xl p-6 shadow-sm border">
                <div className="flex items-center justify-between mb-4">
                  <h3 className="font-semibold text-lg flex items-center gap-2">
                    <Library className="w-5 h-5 text-accent" /> Sound Library
@@ -98,7 +97,7 @@ export default function StudioPage() {
                      const CharIcon = CHARACTER_TYPES.find(ct => ct.id === clip.characterType)?.icon || Music2;
                      return (
                        <div key={clip.id} className="group relative bg-muted/30 p-4 rounded-xl border flex flex-col items-center gap-2 hover:bg-muted/50 transition-colors">
-                          <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm">
+                          <div className="w-12 h-12 bg-background rounded-lg flex items-center justify-center shadow-sm">
                              <CharIcon className="w-8 h-8 text-primary" />
                           </div>
                           <span className="text-xs font-bold truncate w-full text-center">{clip.name}</span>
@@ -120,12 +119,12 @@ export default function StudioPage() {
 
           {/* Tips Panel */}
           <div className="lg:col-span-4 space-y-6">
-             <div className="bg-primary text-white rounded-2xl p-6 shadow-lg relative overflow-hidden">
+             <div className="bg-primary text-primary-foreground rounded-2xl p-6 shadow-lg relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10">
                   <Music2 className="w-32 h-32" />
                 </div>
                 <h3 className="text-xl font-bold mb-4 relative z-10">Pro Tip</h3>
-                <ul className="space-y-4 relative z-10 text-sm font-medium text-white/90">
+                <ul className="space-y-4 relative z-10 text-sm font-medium text-primary-foreground/90">
                   <li>• Pick a sound for each channel in the grid.</li>
                   <li>• Toggle cells to arrange your rhythm.</li>
                   <li>• Each sound has its own animated character!</li>

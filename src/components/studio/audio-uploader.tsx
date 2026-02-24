@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState } from 'react';
@@ -45,7 +44,7 @@ export function AudioUploader({ user, onClipSaved }: { user: User; onClipSaved: 
   };
 
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
+    <div className="bg-card rounded-2xl p-6 shadow-sm border space-y-4">
       <h3 className="font-semibold text-lg flex items-center gap-2">
         <Upload className="w-5 h-5 text-accent" /> Upload Audio
       </h3>
@@ -77,7 +76,7 @@ export function AudioUploader({ user, onClipSaved }: { user: User; onClipSaved: 
             value={clipName}
             onChange={(e) => setClipName(e.target.value)}
             placeholder="Name your clip"
-            className="w-full text-sm border-b py-1 focus:outline-none focus:border-primary"
+            className="w-full text-sm bg-transparent border-b border-border py-1 focus:outline-none focus:border-primary text-foreground"
           />
           <div className="grid grid-cols-4 gap-2">
             {CHARACTER_TYPES.map((char) => {
@@ -88,7 +87,7 @@ export function AudioUploader({ user, onClipSaved }: { user: User; onClipSaved: 
                   onClick={() => setSelectedChar(char.id)}
                   className={cn(
                     "p-2 rounded-lg border transition-all",
-                    selectedChar === char.id ? "border-primary bg-primary/5" : "border-transparent bg-muted/50"
+                    selectedChar === char.id ? "border-primary bg-primary/10" : "border-transparent bg-muted/50"
                   )}
                 >
                   <Icon className={cn("w-6 h-6 mx-auto", char.color)} />
@@ -96,7 +95,7 @@ export function AudioUploader({ user, onClipSaved }: { user: User; onClipSaved: 
               );
             })}
           </div>
-          <Button className="w-full" onClick={handleUpload}>
+          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleUpload}>
             <Save className="w-4 h-4 mr-2" /> Save Uploaded Clip
           </Button>
         </div>

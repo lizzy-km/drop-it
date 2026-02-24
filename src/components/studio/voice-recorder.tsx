@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -83,7 +82,7 @@ export function VoiceRecorder({ user, onClipSaved }: VoiceRecorderProps) {
   };
 
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border space-y-4">
+    <div className="bg-card rounded-2xl p-6 shadow-sm border space-y-4">
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-semibold text-lg flex items-center gap-2">
           <Mic className="w-5 h-5 text-accent" /> Record Sound
@@ -92,7 +91,7 @@ export function VoiceRecorder({ user, onClipSaved }: VoiceRecorderProps) {
           value={clipName}
           onChange={(e) => setClipName(e.target.value)}
           placeholder="Clip name..."
-          className="text-sm border-none focus:ring-0 text-right font-medium text-primary"
+          className="text-sm bg-transparent border-none focus:ring-0 text-right font-medium text-primary outline-none"
         />
       </div>
 
@@ -105,10 +104,10 @@ export function VoiceRecorder({ user, onClipSaved }: VoiceRecorderProps) {
             <p className="text-red-500 font-medium animate-pulse">Recording...</p>
           </div>
         ) : audioUrl ? (
-          <div className="flex flex-col items-center gap-4">
-            <audio src={audioUrl} controls className="w-full max-w-xs" />
+          <div className="flex flex-col items-center gap-4 w-full">
+            <audio src={audioUrl} controls className="w-full max-w-xs h-8" />
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setAudioUrl(null)}>
+              <Button variant="outline" size="sm" onClick={() => setAudioUrl(null)} className="text-foreground border-border bg-transparent">
                 <RotateCcw className="w-4 h-4 mr-2" /> Discard
               </Button>
               <Button size="sm" onClick={saveClip}>
@@ -119,7 +118,7 @@ export function VoiceRecorder({ user, onClipSaved }: VoiceRecorderProps) {
         ) : (
           <Button 
             size="lg" 
-            className="w-20 h-20 rounded-full bg-primary hover:bg-primary/90"
+            className="w-20 h-20 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg"
             onClick={startRecording}
           >
             <Mic className="w-8 h-8" />
@@ -149,7 +148,7 @@ export function VoiceRecorder({ user, onClipSaved }: VoiceRecorderProps) {
                 className={cn(
                   "p-3 rounded-xl border-2 transition-all flex flex-col items-center gap-1",
                   selectedChar === char.id 
-                    ? "border-primary bg-primary/5 shadow-sm" 
+                    ? "border-primary bg-primary/10 shadow-sm" 
                     : "border-transparent bg-muted/50 hover:bg-muted"
                 )}
               >

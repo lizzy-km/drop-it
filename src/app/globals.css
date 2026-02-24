@@ -1,49 +1,29 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 45 100% 97%;
-    --foreground: 20 20% 10%;
-    --card: 0 0% 100%;
-    --card-foreground: 20 20% 15%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 20 20% 15%;
+    --background: 20 20% 4%;
+    --foreground: 45 100% 98%;
+    --card: 20 20% 7%;
+    --card-foreground: 45 100% 98%;
+    --popover: 20 20% 7%;
+    --popover-foreground: 45 100% 98%;
     --primary: 47 100% 45%;
-    --primary-foreground: 20 20% 10%;
-    --secondary: 47 40% 92%;
-    --secondary-foreground: 20 20% 20%;
-    --muted: 47 30% 90%;
-    --muted-foreground: 47 20% 40%;
+    --primary-foreground: 20 20% 4%;
+    --secondary: 20 20% 12%;
+    --secondary-foreground: 45 100% 98%;
+    --muted: 20 20% 12%;
+    --muted-foreground: 45 20% 60%;
     --accent: 38 92% 50%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 47 30% 88%;
-    --input: 47 30% 88%;
+    --border: 20 20% 15%;
+    --input: 20 20% 15%;
     --ring: 47 100% 45%;
     --radius: 1.25rem;
-  }
-  .dark {
-    --background: 45 30% 5%;
-    --foreground: 45 100% 96%;
-    --card: 45 30% 8%;
-    --card-foreground: 45 100% 96%;
-    --popover: 45 30% 8%;
-    --popover-foreground: 45 100% 96%;
-    --primary: 47 100% 50%;
-    --primary-foreground: 45 30% 5%;
-    --secondary: 45 30% 15%;
-    --secondary-foreground: 45 100% 96%;
-    --muted: 45 30% 15%;
-    --muted-foreground: 45 30% 60%;
-    --accent: 38 92% 50%;
-    --accent-foreground: 0 0% 100%;
-    --border: 45 30% 15%;
-    --input: 45 30% 15%;
-    --ring: 47 100% 50%;
   }
 }
 
@@ -71,16 +51,16 @@
   animation: bounce-subtle 2s infinite ease-in-out;
 }
 
-/* Custom scrollbar for yellow theme */
+/* Custom scrollbar for dark yellow theme */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-muted/30;
+  @apply bg-background;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-primary/40 rounded-full hover:bg-primary/60 transition-colors;
+  @apply bg-primary/20 rounded-full hover:bg-primary/40 transition-colors;
 }
