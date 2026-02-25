@@ -8,7 +8,7 @@ import {
   Loader2, Zap, Waves, Sparkles, Mic2, VolumeX, Volume2, 
   RotateCcw, Scissors, Timer, Settings, Volume1, Maximize2, 
   Gauge, BrainCircuit, Wand2, Activity, Sliders, Repeat,
-  ChevronRight, ArrowRightLeft, FastForward, Clock
+  ChevronRight, ArrowRightLeft, FastForward, Clock, FileUp, FileDown
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
@@ -56,7 +56,7 @@ const VisualEnvelope = ({ attack, release }: { attack: number, release: number }
   const r = (release / 2) * 100;
   
   return (
-    <div className="h-32 w-full bg-black/60 rounded-[2rem] border border-primary/10 overflow-hidden relative shadow-inner">
+    <div className="h-32 w-full bg-black/60 rounded-[0] border border-primary/10 overflow-hidden relative shadow-inner">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
         <defs>
           <linearGradient id="env-grad" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -81,7 +81,7 @@ const VisualEnvelope = ({ attack, release }: { attack: number, release: number }
 
 const VisualTrim = ({ start, end }: { start: number, end: number }) => {
   return (
-    <div className="h-24 w-full bg-black/60 rounded-[2rem] border border-primary/10 overflow-hidden relative shadow-inner group">
+    <div className="h-24 w-full bg-black/60 rounded-[0] border border-primary/10 overflow-hidden relative shadow-inner group">
       <div className="absolute inset-0 opacity-20 flex items-center justify-around pointer-events-none">
         {Array.from({ length: 20 }).map((_, i) => (
           <div key={i} className="w-0.5 bg-primary" style={{ height: `${20 + Math.random() * 60}%` }} />
@@ -146,7 +146,7 @@ const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }) => {
   }, [analyser]);
 
   return (
-    <div className="h-24 w-full bg-black/40 rounded-[2rem] overflow-hidden border border-primary/10 relative shadow-inner">
+    <div className="h-24 w-full bg-black/40 rounded-[1rem] overflow-hidden border border-primary/10 relative shadow-inner">
       <canvas ref={canvasRef} width={800} height={100} className="w-full h-full" />
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
         <Activity className="w-4 h-4 text-primary" />
@@ -157,7 +157,7 @@ const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }) => {
 
 // --- MAIN RHYTHM COMPONENT ---
 
-export function RhythmGrid({ user, clips, track }: {
+export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   user: User;
   clips: AudioClip[];
   track?: Track;
@@ -351,25 +351,6 @@ export function RhythmGrid({ user, clips, track }: {
     setChannelSettings(p => ({ ...p, [idx]: { ...p[idx], [key]: val } }));
   };
 
-  const handleAiCompose = async () => {
-    if (!aiPrompt || clips.length === 0) {
-      toast({ title: "Signal Missing", description: "Record sounds for the Architect to analyze." });
-      return;
-    }
-    setIsAiLoading(true);
-    try {
-      const res = await generateBeat({ prompt: aiPrompt, availableClips: clips.map(c => ({ id: c.id, name: c.name })), numChannels, numSteps });
-      setGrid(res.grid);
-      setBpm(res.bpm);
-      setTitle(res.title.toUpperCase());
-      toast({ title: "Neural Pattern Manifested", className: "bg-primary text-black font-black" });
-    } catch (e) {
-      toast({ title: "Synthesis Error", variant: "destructive" });
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
   const handleSave = () => {
     const newTrack: Track = {
       id: track?.id || crypto.randomUUID(),
@@ -384,7 +365,75 @@ export function RhythmGrid({ user, clips, track }: {
       createdAt: Date.now()
     };
     db.saveTrack(newTrack);
+    onSaveTrack(newTrack);
     toast({ title: "Session Synchronized", description: `${title} has been archived.` });
+  };
+
+  const handleExportConfig = () => {
+    const currentTrack: Track = {
+      id: track?.id || crypto.randomUUID(),
+      userId: user.id,
+      title,
+      bpm,
+      numChannels,
+      numSteps,
+      grid,
+      channelSettings,
+      selectedClips: selectedClipsForChannel,
+      createdAt: Date.now()
+    };
+
+    const usedClipIds = new Set(Object.values(grid).flat());
+    const usedClips = clips.filter(c => usedClipIds.has(c.id));
+
+    const exportData = {
+      version: "1.0",
+      type: "DROPIT_PROJECT",
+      track: currentTrack,
+      clips: usedClips
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.replace(/\s+/g, '_')}_Config.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: "Config Exported", description: "Project bundled for external storage." });
+  };
+
+  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.type !== "DROPIT_PROJECT") throw new Error("Invalid Format");
+
+        data.clips.forEach((clip: AudioClip) => {
+          db.saveClip({ ...clip, userId: user.id }); 
+        });
+
+        const importedTrack = {
+          ...data.track,
+          userId: user.id,
+          id: crypto.randomUUID(),
+          title: `IMPORTED_${data.track.title}`
+        };
+        db.saveTrack(importedTrack);
+        
+        toast({ title: "Config Imported", description: "Re-syncing neural paths..." });
+        window.location.href = `/studio?id=${importedTrack.id}`;
+      } catch (err) {
+        toast({ title: "Import Failed", description: "Corrupted or invalid config file.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
   };
 
   return (
@@ -402,7 +451,7 @@ export function RhythmGrid({ user, clips, track }: {
             />
             
             <div className="flex flex-col md:flex-row items-center gap-8">
-               <div className="flex items-center gap-4 bg-black/60 rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full ai-glow-input">
+               <div className="flex items-center gap-4 h-[60] rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full ai-glow-input">
                   <BrainCircuit className="w-6 h-6 text-primary animate-pulse" />
                   <input 
                     placeholder="DESCRIBE_THE_VIBE..."
@@ -412,7 +461,24 @@ export function RhythmGrid({ user, clips, track }: {
                   />
                   <Button 
                     variant="ghost" 
-                    onClick={handleAiCompose}
+                    onClick={async () => {
+                      if (!aiPrompt || clips.length === 0) {
+                        toast({ title: "Signal Missing", description: "Record sounds for the Architect to analyze." });
+                        return;
+                      }
+                      setIsAiLoading(true);
+                      try {
+                        const res = await generateBeat({ prompt: aiPrompt, availableClips: clips.map(c => ({ id: c.id, name: c.name })), numChannels, numSteps });
+                        setGrid(res.grid);
+                        setBpm(res.bpm);
+                        setTitle(res.title.toUpperCase());
+                        toast({ title: "Neural Pattern Manifested", className: "bg-primary text-black font-black" });
+                      } catch (e) {
+                        toast({ title: "Synthesis Error", variant: "destructive" });
+                      } finally {
+                        setIsAiLoading(false);
+                      }
+                    }}
                     disabled={isAiLoading}
                     className="h-10 px-6 rounded-full text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-black border border-primary/20"
                   >
@@ -447,9 +513,15 @@ export function RhythmGrid({ user, clips, track }: {
                <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary hover:bg-primary/10" onClick={handleSave}>
                  <Save className="w-5 h-5" />
                </Button>
-               <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary hover:bg-primary/10" onClick={() => toast({ title: "Mastering Signal...", description: "Exporting high-fidelity WAV." })}>
-                 <Download className="w-5 h-5" />
+               <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary hover:bg-primary/10" onClick={handleExportConfig}>
+                 <FileDown className="w-5 h-5" />
                </Button>
+               <div className="relative">
+                 <input type="file" accept=".json" onChange={handleImportConfig} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                 <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary hover:bg-primary/10 pointer-events-none">
+                   <FileUp className="w-5 h-5" />
+                 </Button>
+               </div>
             </div>
           </div>
         </div>
@@ -512,8 +584,8 @@ export function RhythmGrid({ user, clips, track }: {
                           </DialogTitle>
                        </DialogHeader>
                        
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-10 py-10 max-h-[70vh] overflow-y-auto pr-4 custom-scrollbar">
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-10 py-10 max-h-[60vh] overflow-y-scroll pr-4">
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative h-auto group">
                              <div className="absolute top-0 right-0 p-4">
                                 <Waves className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
                              </div>
@@ -552,7 +624,7 @@ export function RhythmGrid({ user, clips, track }: {
                              </div>
                           </div>
 
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
                              <div className="absolute top-0 right-0 p-4">
                                 <Timer className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
                              </div>
@@ -578,7 +650,7 @@ export function RhythmGrid({ user, clips, track }: {
                              </div>
                           </div>
 
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
                              <div className="absolute top-0 right-0 p-4">
                                 <Sparkles className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
                              </div>
@@ -608,7 +680,7 @@ export function RhythmGrid({ user, clips, track }: {
                              </div>
                           </div>
 
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
                              <div className="absolute top-0 right-0 p-4">
                                 <ArrowRightLeft className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
                              </div>
