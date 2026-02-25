@@ -950,7 +950,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                    <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="h-10 w-10 rounded-xl text-red-500/40 hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                    className="h-10 w-10 rounded-xl text-red-500/40 hover:text-red-500 hover:bg-red-500/10 transition-all  group-hover:opacity-100"
                     onClick={() => removeChannel(chIdx)}
                     title="Terminate Signal Stream"
                    >
@@ -959,7 +959,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 </div>
               </div>
 
-              <div className="flex-1 flex gap-3 h-20 items-center overflow-x-auto pb-4 custom-scrollbar">
+              <div className="flex-1 flex gap-3 h-[120px] items-center overflow-x-auto pb-4 custom-scrollbar">
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const clipIds = grid[`${chIdx}-${stepIdx}`] || [];
                   const clip = clips.find(c => c.id === clipIds[0]);
@@ -985,7 +985,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                         setGrid(ng);
                       }}
                       className={cn(
-                        "w-16 h-full rounded-2xl transition-all duration-300 flex items-center justify-center relative shrink-0",
+                        "w-16 h-[80%] rounded-2xl transition-all duration-300 flex items-center justify-center relative shrink-0",
                         clip ? `${s.color} shadow-2xl brightness-125 translate-y-[-4px]` : "bg-neutral-800/40 hover:bg-neutral-700/60 border border-white/5",
                         isCurrent ? "ring-4 ring-primary/40 scale-110 z-10" : "scale-100"
                       )}
