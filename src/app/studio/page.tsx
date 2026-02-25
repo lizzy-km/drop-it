@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { Label } from '@/components/ui/label';
+import { Logo } from '@/components/brand/logo';
 
 function StudioContent() {
   const [user, setUser] = useState<User | null>(null);
@@ -68,29 +69,30 @@ function StudioContent() {
               <ChevronLeft className="w-6 h-6" />
             </Button>
           </ReactLink>
-          <div className="flex items-center gap-5">
+          <Logo showText size={56} />
+        </div>
+
+        <div className="flex items-center gap-10">
+          <div className="hidden md:flex flex-col items-end">
+             <h2 className="text-xl font-black tracking-tighter leading-none text-primary uppercase">SESSION_{user.name.toUpperCase()}</h2>
+             <div className="flex items-center gap-2 mt-1">
+                <span className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
+                <span className="text-[8px] font-black uppercase tracking-[0.3em] text-muted-foreground">Studio Live</span>
+             </div>
+          </div>
+          <div className="flex items-center gap-4 border-l border-white/5 pl-10">
+            <ReactLink href="/browse">
+               <Button variant="outline" className="rounded-full font-black px-8 h-12 border-primary/20 bg-black/20 hover:bg-primary/5 uppercase tracking-widest text-xs">
+                 My Drop
+               </Button>
+            </ReactLink>
             <div className="relative">
               <img src={user.avatar} className="w-14 h-14 rounded-2xl object-cover ring-2 ring-primary/30" alt="" />
               <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center border-4 border-background">
                 <Zap className="w-2.5 h-2.5 text-black" />
               </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-black tracking-tighter leading-none text-primary">STUDIO_{user.name.toUpperCase()}</h2>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">Session Live</span>
-              </div>
-            </div>
           </div>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <ReactLink href="/browse">
-             <Button variant="outline" className="rounded-full font-black px-8 h-12 border-primary/20 bg-black/20 hover:bg-primary/5 uppercase tracking-widest text-xs">
-               My Drop
-             </Button>
-          </ReactLink>
         </div>
       </header>
 

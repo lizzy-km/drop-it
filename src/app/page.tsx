@@ -1,11 +1,13 @@
+
 "use client";
 
 import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { db, User } from '@/lib/db';
-import { UserPlus, Play, Disc, ArrowRight, Activity, Zap } from 'lucide-react';
+import { UserPlus, ArrowRight, Activity, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Logo } from '@/components/brand/logo';
 
 export default function LandingPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -41,18 +43,24 @@ export default function LandingPage() {
       <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-primary/5 rounded-full blur-[140px] pointer-events-none" />
       
       <div className="max-w-6xl w-full flex flex-col items-center text-center space-y-24 relative z-10">
-        <div className="space-y-8 max-w-4xl">
-          <div className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-white/5 border border-white/10 text-[10px] font-black tracking-[0.4em] uppercase text-primary animate-in fade-in slide-in-from-bottom-2">
-            <Zap className="w-4 h-4 text-primary" />
-            Neural_Rhythm_Engine_Active
+        <div className="space-y-12 max-w-4xl flex flex-col items-center">
+          <div className="animate-in fade-in zoom-in duration-1000">
+            <Logo size={120} />
           </div>
-          <h1 className="text-8xl md:text-[12rem] font-black tracking-[-0.05em] leading-none animate-in fade-in slide-in-from-top-12 duration-1000">
-            DROP <span className="text-primary italic">IT.</span>
-          </h1>
-          <p className="text-2xl md:text-3xl text-muted-foreground font-medium max-w-3xl mx-auto leading-relaxed animate-in fade-in duration-1000 delay-300">
-            The world's most advanced neural workspace for sonic architecture. 
-            Record. Synthesize. Manifest.
-          </p>
+          
+          <div className="space-y-6">
+            <div className="inline-flex items-center gap-3 px-6 py-2 rounded-full bg-white/5 border border-white/10 text-[10px] font-black tracking-[0.4em] uppercase text-primary animate-in fade-in slide-in-from-bottom-2">
+              <Zap className="w-4 h-4 text-primary" />
+              Neural_Rhythm_Engine_Active
+            </div>
+            <h1 className="text-8xl md:text-[12rem] font-black tracking-[-0.05em] leading-none animate-in fade-in slide-in-from-top-12 duration-1000">
+              DROP <span className="text-primary italic">IT.</span>
+            </h1>
+            <p className="text-2xl md:text-3xl text-muted-foreground font-medium max-w-3xl mx-auto leading-relaxed animate-in fade-in duration-1000 delay-300">
+              The world's most advanced neural workspace for sonic architecture. 
+              Record. Synthesize. Manifest.
+            </p>
+          </div>
         </div>
 
         <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pt-12">
@@ -101,7 +109,7 @@ export default function LandingPage() {
             </Button>
           </Link>
           <div className="flex gap-2 text-[10px] font-black text-muted-foreground uppercase tracking-widest opacity-20">
-             <span>Engine_v2.0.0</span>
+             <span>Engine_v2.5.0</span>
              <span>•</span>
              <span>Neural_Enabled</span>
           </div>

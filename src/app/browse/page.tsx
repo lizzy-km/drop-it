@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useEffect, useState, useRef } from 'react';
@@ -9,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { toast } from '@/hooks/use-toast';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Logo } from '@/components/brand/logo';
 
 const makeDistortionCurve = (amount: number) => {
   const k = amount * 100;
@@ -227,13 +229,13 @@ export default function BrowsePage() {
     <div className="min-h-screen bg-background">
       <header className="bg-card border-b px-10 py-6 sticky top-0 z-50 gold-border">
         <div className="max-w-[1600px] mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-8">
             <Link href="/">
               <Button variant="ghost" size="icon" className="rounded-2xl text-foreground hover:bg-muted">
                 <ChevronLeft className="w-6 h-6" />
               </Button>
             </Link>
-            <h1 className="text-4xl font-black tracking-tighter text-primary italic uppercase">My_Drop</h1>
+            <Logo showText size={48} />
           </div>
           <Link href="/studio">
              <Button className="rounded-full bg-primary hover:bg-primary/90 px-8 h-12 font-black text-black uppercase tracking-widest text-xs">
