@@ -92,6 +92,15 @@
   animation: spin-slow 12s linear infinite;
 }
 
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 2s infinite ease-in-out;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -113,4 +122,8 @@
 
 .channel-strip-active {
   @apply border-primary/40 bg-primary/5 translate-x-1;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  height: 4px;
 }
