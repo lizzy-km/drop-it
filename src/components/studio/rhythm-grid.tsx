@@ -9,7 +9,7 @@ import {
   RotateCcw, Scissors, Timer, Settings, Volume1, Maximize2, 
   Gauge, Activity, Sliders, Repeat,
   ChevronRight, ArrowRightLeft, FastForward, Clock, FileUp, FileDown,
-  Dices, ArrowLeft, ArrowRight, Copy, X
+  Dices, ArrowLeft, ArrowRight, Copy, X, AlertTriangle
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
@@ -19,6 +19,7 @@ import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 const DEFAULT_CHANNELS = 4;
 const MAX_STEPS = 64;
@@ -357,7 +358,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     for (let c = 0; c < numChannels; c++) {
       const clipId = selectedClipsForChannel[c.toString()] || clips[Math.floor(Math.random() * clips.length)].id;
       for (let s = 0; s < numSteps; s++) {
-        // Simple probability-based randomization
         if (Math.random() > 0.8) {
           newGrid[`${c}-${s}`] = [clipId];
         }
@@ -398,6 +398,54 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const clearGrid = () => {
     setGrid({});
     toast({ title: "Grid Cleared" });
+  };
+
+  const removeChannel = (chIdx: number) => {
+    if (numChannels <= 1) {
+      toast({ title: "Action Denied", description: "Studio requires at least one signal stream.", variant: "destructive" });
+      return;
+    }
+
+    const newGrid: Record<string, string[]> = {};
+    const newSettings: Record<string, ChannelSettings> = {};
+    const newSelectedClips: Record<string, string> = {};
+
+    // Remap grid indices
+    Object.keys(grid).forEach(key => {
+      const [c, s] = key.split('-').map(Number);
+      if (c < chIdx) {
+        newGrid[`${c}-${s}`] = grid[key];
+      } else if (c > chIdx) {
+        newGrid[`${c - 1}-${s}`] = grid[key];
+      }
+    });
+
+    // Remap settings and selections
+    for (let i = 0; i < numChannels; i++) {
+      if (i < chIdx) {
+        newSettings[i.toString()] = channelSettings[i.toString()];
+        newSelectedClips[i.toString()] = selectedClipsForChannel[i.toString()];
+      } else if (i > chIdx) {
+        newSettings[(i - 1).toString()] = channelSettings[i.toString()];
+        newSelectedClips[(i - 1).toString()] = selectedClipsForChannel[i.toString()];
+      }
+    }
+
+    setGrid(newGrid);
+    setChannelSettings(newSettings);
+    setSelectedClipsForChannel(newSelectedClips);
+    setNumChannels(prev => prev - 1);
+    toast({ title: "Signal Stream Terminated", description: `Track ${chIdx} has been removed from session.` });
+  };
+
+  const deleteProject = () => {
+    if (track?.id) {
+      db.deleteTrack(track.id);
+      toast({ title: "Project Decommissioned", description: "All neural paths destroyed." });
+      window.location.href = '/browse';
+    } else {
+      toast({ title: "Error", description: "Project not found in database.", variant: "destructive" });
+    }
   };
 
   // --- CORE SYSTEM ACTIONS ---
@@ -569,6 +617,29 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                    <FileUp className="w-5 h-5" />
                  </Button>
                </div>
+               {track?.id && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button size="icon" className="w-12 h-12 rounded-2xl border-red-500/20 bg-red-500/10 text-red-500 hover:bg-red-500/20">
+                      <Trash2 className="w-5 h-5" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent className="glass-panel border-red-500/20 rounded-[2.5rem] p-12 gold-shadow">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="text-3xl font-black italic tracking-tighter text-red-500 uppercase flex items-center gap-4">
+                        <AlertTriangle className="w-8 h-8" /> Termination_Required
+                      </AlertDialogTitle>
+                      <AlertDialogDescription className="text-muted-foreground font-bold leading-relaxed pt-4">
+                        You are about to permanently decommission this project session. All neural pattern data, acoustic configurations, and sequences will be purged. This action is irreversible.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="pt-10 flex gap-4">
+                      <AlertDialogCancel className="h-14 rounded-full font-black uppercase tracking-widest border-white/5 bg-white/5 flex-1">Abort</AlertDialogCancel>
+                      <AlertDialogAction onClick={deleteProject} className="h-14 rounded-full font-black uppercase tracking-widest bg-red-500 text-white hover:bg-red-600 flex-1">Confirm_Purge</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+               )}
             </div>
           </div>
         </div>
@@ -613,162 +684,174 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 </div>
 
                 <div className="flex flex-col gap-2 shrink-0">
-                   <Button variant="ghost" size="icon" className={cn("h-10 w-10 rounded-xl", s.muted ? "text-red-500 bg-red-500/10" : "text-muted-foreground")} onClick={() => updateChannelSetting(chKey, 'muted', !s.muted)}>
-                     {s.muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-                   </Button>
-                   
-                   <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-primary/40 hover:text-primary"><Sliders className="w-5 h-5" /></Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-4xl glass-panel border-primary/20 rounded-[3rem] p-12 gold-shadow">
-                       <DialogHeader>
-                          <DialogTitle className="text-4xl font-black italic text-primary tracking-tighter uppercase flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <Maximize2 className="w-8 h-8" /> Sampler_Lab
-                            </div>
-                            <span className="text-[10px] tracking-[0.4em] font-black text-primary/40">Channel_{chIdx}</span>
-                          </DialogTitle>
-                       </DialogHeader>
-                       
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-10 py-10 max-h-[60vh] overflow-y-scroll pr-4">
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative h-auto group">
-                             <div className="absolute top-0 right-0 p-4">
-                                <Waves className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
-                             </div>
-                             <div className="flex justify-between items-center">
-                               <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Signal_Modifiers</h4>
-                               <div className="flex items-center gap-3">
-                                  <Label className="text-[9px] font-black uppercase">Reverse</Label>
-                                  <Switch checked={s.reversed} onCheckedChange={(v) => updateChannelSetting(chKey, 'reversed', v)} />
+                   <div className="flex gap-2">
+                     <Button variant="ghost" size="icon" className={cn("h-10 w-10 rounded-xl", s.muted ? "text-red-500 bg-red-500/10" : "text-muted-foreground")} onClick={() => updateChannelSetting(chKey, 'muted', !s.muted)}>
+                       {s.muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                     </Button>
+                     
+                     <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-primary/40 hover:text-primary"><Sliders className="w-5 h-5" /></Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-4xl glass-panel border-primary/20 rounded-[3rem] p-12 gold-shadow">
+                         <DialogHeader>
+                            <DialogTitle className="text-4xl font-black italic text-primary tracking-tighter uppercase flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <Maximize2 className="w-8 h-8" /> Sampler_Lab
+                              </div>
+                              <span className="text-[10px] tracking-[0.4em] font-black text-primary/40">Channel_{chIdx}</span>
+                            </DialogTitle>
+                         </DialogHeader>
+                         
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 py-10 max-h-[60vh] overflow-y-scroll pr-4">
+                            <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative h-auto group">
+                               <div className="absolute top-0 right-0 p-4">
+                                  <Waves className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
                                </div>
-                             </div>
+                               <div className="flex justify-between items-center">
+                                 <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Signal_Modifiers</h4>
+                                 <div className="flex items-center gap-3">
+                                    <Label className="text-[9px] font-black uppercase">Reverse</Label>
+                                    <Switch checked={s.reversed} onCheckedChange={(v) => updateChannelSetting(chKey, 'reversed', v)} />
+                                 </div>
+                               </div>
 
-                             <VisualTrim start={s.trimStart} end={s.trimEnd} />
+                               <VisualTrim start={s.trimStart} end={s.trimEnd} />
 
-                             <div className="space-y-6">
-                                <div className="space-y-3">
-                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Trim_Start</span>
-                                      <span className="text-primary">{Math.round(s.trimStart * 100)}%</span>
-                                   </div>
-                                   <Slider value={[s.trimStart * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'trimStart', v[0] / 100)} />
-                                </div>
-                                <div className="space-y-3">
-                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Trim_End</span>
-                                      <span className="text-primary">{Math.round(s.trimEnd * 100)}%</span>
-                                   </div>
-                                   <Slider value={[s.trimEnd * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'trimEnd', v[0] / 100)} />
-                                </div>
-                                <div className="space-y-3">
-                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Auto_Tune</span>
-                                      <span className="text-primary">{Math.round(s.autoTune * 100)}%</span>
-                                   </div>
-                                   <Slider value={[s.autoTune * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'autoTune', v[0] / 100)} />
-                                </div>
-                             </div>
-                          </div>
+                               <div className="space-y-6">
+                                  <div className="space-y-3">
+                                     <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                        <span>Trim_Start</span>
+                                        <span className="text-primary">{Math.round(s.trimStart * 100)}%</span>
+                                     </div>
+                                     <Slider value={[s.trimStart * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'trimStart', v[0] / 100)} />
+                                  </div>
+                                  <div className="space-y-3">
+                                     <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                        <span>Trim_End</span>
+                                        <span className="text-primary">{Math.round(s.trimEnd * 100)}%</span>
+                                     </div>
+                                     <Slider value={[s.trimEnd * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'trimEnd', v[0] / 100)} />
+                                  </div>
+                                  <div className="space-y-3">
+                                     <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                        <span>Auto_Tune</span>
+                                        <span className="text-primary">{Math.round(s.autoTune * 100)}%</span>
+                                     </div>
+                                     <Slider value={[s.autoTune * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'autoTune', v[0] / 100)} />
+                                  </div>
+                               </div>
+                            </div>
 
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
-                             <div className="absolute top-0 right-0 p-4">
-                                <Timer className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
-                             </div>
-                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Envelope_Dynamics</h4>
-                             
-                             <VisualEnvelope attack={s.attack} release={s.release} />
+                            <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
+                               <div className="absolute top-0 right-0 p-4">
+                                  <Timer className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
+                               </div>
+                               <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Envelope_Dynamics</h4>
+                               
+                               <VisualEnvelope attack={s.attack} release={s.release} />
 
-                             <div className="space-y-6">
-                                <div className="space-y-3">
-                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Attack</span>
-                                      <span className="text-primary">{s.attack.toFixed(2)}s</span>
-                                   </div>
-                                   <Slider value={[s.attack * 100]} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'attack', v[0] / 100)} />
-                                </div>
-                                <div className="space-y-3">
-                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Release</span>
-                                      <span className="text-primary">{s.release.toFixed(2)}s</span>
-                                   </div>
-                                   <Slider value={[s.release * 100]} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'release', v[0] / 100)} />
-                                </div>
-                             </div>
-                          </div>
+                               <div className="space-y-6">
+                                  <div className="space-y-3">
+                                     <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                        <span>Attack</span>
+                                        <span className="text-primary">{s.attack.toFixed(2)}s</span>
+                                     </div>
+                                     <Slider value={[s.attack * 100]} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'attack', v[0] / 100)} />
+                                  </div>
+                                  <div className="space-y-3">
+                                     <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                        <span>Release</span>
+                                        <span className="text-primary">{s.release.toFixed(2)}s</span>
+                                     </div>
+                                     <Slider value={[s.release * 100]} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'release', v[0] / 100)} />
+                                  </div>
+                               </div>
+                            </div>
 
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
-                             <div className="absolute top-0 right-0 p-4">
-                                <Sparkles className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
-                             </div>
-                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Harmonics</h4>
-                             <div className="space-y-6">
-                                <div className="space-y-3">
-                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Pitch</span>
-                                      <span className="text-primary">{s.pitch.toFixed(2)}x</span>
-                                   </div>
-                                   <Slider value={[s.pitch * 50]} min={25} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'pitch', v[0] / 50)} />
-                                </div>
-                                <div className="space-y-3">
-                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Cutoff</span>
-                                      <span className="text-primary">{Math.round(s.cutoff * 100)}%</span>
-                                   </div>
-                                   <Slider value={[s.cutoff * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'cutoff', v[0] / 100)} />
-                                </div>
-                                <div className="space-y-3">
-                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Distortion</span>
-                                      <span className="text-primary">{Math.round(s.distortion * 100)}%</span>
-                                   </div>
-                                   <Slider value={[s.distortion * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'distortion', v[0] / 100)} />
-                                </div>
-                             </div>
-                          </div>
+                            <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
+                               <div className="absolute top-0 right-0 p-4">
+                                  <Sparkles className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
+                               </div>
+                               <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Harmonics</h4>
+                               <div className="space-y-6">
+                                  <div className="space-y-3">
+                                     <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                        <span>Pitch</span>
+                                        <span className="text-primary">{s.pitch.toFixed(2)}x</span>
+                                     </div>
+                                     <Slider value={[s.pitch * 50]} min={25} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'pitch', v[0] / 50)} />
+                                  </div>
+                                  <div className="space-y-3">
+                                     <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                        <span>Cutoff</span>
+                                        <span className="text-primary">{Math.round(s.cutoff * 100)}%</span>
+                                     </div>
+                                     <Slider value={[s.cutoff * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'cutoff', v[0] / 100)} />
+                                  </div>
+                                  <div className="space-y-3">
+                                     <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                        <span>Distortion</span>
+                                        <span className="text-primary">{Math.round(s.distortion * 100)}%</span>
+                                     </div>
+                                     <Slider value={[s.distortion * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'distortion', v[0] / 100)} />
+                                  </div>
+                               </div>
+                            </div>
 
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
-                             <div className="absolute top-0 right-0 p-4">
-                                <ArrowRightLeft className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
-                             </div>
-                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Spatial_Field</h4>
-                             <div className="space-y-6">
-                                <div className="space-y-3">
-                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Panning</span>
-                                      <span className="text-primary">{s.pan.toFixed(2)}</span>
-                                   </div>
-                                   <Slider value={[s.pan * 50 + 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chKey, 'pan', (v[0] - 50) / 50)} />
-                                </div>
-                                <div className="space-y-3">
-                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Delay_Send</span>
-                                      <span className="text-primary">{Math.round(s.delay * 100)}%</span>
-                                   </div>
-                                   <Slider value={[s.delay * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'delay', v[0] / 100)} />
-                                </div>
-                                <div className="pt-6">
-                                   <Button 
-                                      className="w-full h-20 rounded-[1.5rem] bg-primary text-black font-black uppercase tracking-[0.3em] hover:bg-primary/90 shadow-2xl transition-all"
-                                      onClick={() => { if (selId) playClip(selId, chKey); }}
-                                   >
-                                      <Play className="w-6 h-6 mr-3 fill-current" /> Audition_Signal
-                                   </Button>
-                                </div>
-                             </div>
-                          </div>
-                       </div>
-                       
-                       <DialogFooter className="pt-8 border-t border-white/5">
-                          <Button 
-                            className="w-full h-14 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.4em] hover:bg-primary hover:text-black transition-all"
-                            onClick={() => toast({ title: "Neural Synchronization Complete" })}
-                          >
-                             Commit_Changes
-                          </Button>
-                       </DialogFooter>
-                    </DialogContent>
-                   </Dialog>
+                            <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
+                               <div className="absolute top-0 right-0 p-4">
+                                  <ArrowRightLeft className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
+                               </div>
+                               <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Spatial_Field</h4>
+                               <div className="space-y-6">
+                                  <div className="space-y-3">
+                                     <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                        <span>Panning</span>
+                                        <span className="text-primary">{s.pan.toFixed(2)}</span>
+                                     </div>
+                                     <Slider value={[s.pan * 50 + 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chKey, 'pan', (v[0] - 50) / 50)} />
+                                  </div>
+                                  <div className="space-y-3">
+                                     <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                        <span>Delay_Send</span>
+                                        <span className="text-primary">{Math.round(s.delay * 100)}%</span>
+                                     </div>
+                                     <Slider value={[s.delay * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'delay', v[0] / 100)} />
+                                  </div>
+                                  <div className="pt-6">
+                                     <Button 
+                                        className="w-full h-20 rounded-[1.5rem] bg-primary text-black font-black uppercase tracking-[0.3em] hover:bg-primary/90 shadow-2xl transition-all"
+                                        onClick={() => { if (selId) playClip(selId, chKey); }}
+                                     >
+                                        <Play className="w-6 h-6 mr-3 fill-current" /> Audition_Signal
+                                     </Button>
+                                  </div>
+                               </div>
+                            </div>
+                         </div>
+                         
+                         <DialogFooter className="pt-8 border-t border-white/5">
+                            <Button 
+                              className="w-full h-14 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.4em] hover:bg-primary hover:text-black transition-all"
+                              onClick={() => toast({ title: "Neural Synchronization Complete" })}
+                            >
+                               Commit_Changes
+                            </Button>
+                         </DialogFooter>
+                      </DialogContent>
+                     </Dialog>
+                   </div>
+                   
+                   <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-10 w-10 rounded-xl text-red-500/40 hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                    onClick={() => removeChannel(chIdx)}
+                    title="Terminate Signal Stream"
+                   >
+                     <Trash2 className="w-4 h-4" />
+                   </Button>
                 </div>
               </div>
 
