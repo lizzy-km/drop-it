@@ -11,27 +11,27 @@ export interface AudioClip {
   id: string;
   userId: string;
   name: string;
-  audioData: string; // Base64 or local blob reference
-  characterType: string; // 'monster', 'robot', 'ghost', 'star'
+  audioData: string; 
+  characterType: string; 
   createdAt: number;
 }
 
 export interface ChannelSettings {
   volume: number;
   pitch: number;
-  delay: number; // 0 to 1 (mix/feedback)
-  reverb: number; // 0 to 1 (room size/wetness)
-  pan: number; // -1 to 1
-  cutoff: number; // 0 to 1
-  distortion: number; // 0 to 1 (drive)
-  autoTune: number; // 0 to 1 (quantization intensity)
-  color: string; // Hex or tailwind class color
+  delay: number; 
+  reverb: number; 
+  pan: number; 
+  cutoff: number; 
+  distortion: number; 
+  autoTune: number; 
+  color: string; 
   muted: boolean;
   reversed: boolean;
-  attack: number; // 0 to 2 seconds
-  release: number; // 0 to 2 seconds
-  trimStart: number; // 0 to 1 (percentage)
-  trimEnd: number; // 0 to 1 (percentage)
+  attack: number; 
+  release: number; 
+  trimStart: number; 
+  trimEnd: number; 
 }
 
 export interface Track {
@@ -41,9 +41,9 @@ export interface Track {
   bpm: number;
   numChannels: number;
   numSteps: number;
-  grid: Record<string, string[]>; // e.g., { "0-0": ["clipId1"], "1-4": ["clipId2"] }
+  grid: Record<string, string[]>; 
   channelSettings: Record<string, ChannelSettings>;
-  selectedClips: Record<string, string>; // Maps channel index string to clip ID
+  selectedClips: Record<string, string>; 
   createdAt: number;
 }
 
@@ -59,8 +59,8 @@ export const db = {
     if (typeof window === 'undefined') return [];
     const data = localStorage.getItem(STORAGE_KEYS.USERS);
     return data ? JSON.parse(data) : [
-      { id: 'u1', name: 'Master Beat', avatar: 'https://picsum.photos/seed/u1/200' },
-      { id: 'u2', name: 'DJ Flow', avatar: 'https://picsum.photos/seed/u2/200' }
+      { id: 'u1', name: 'Neural Producer', avatar: 'https://picsum.photos/seed/u1/200' },
+      { id: 'u2', name: 'Sonic Architect', avatar: 'https://picsum.photos/seed/u2/200' }
     ];
   },
   

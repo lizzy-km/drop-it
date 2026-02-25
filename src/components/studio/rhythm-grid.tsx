@@ -190,8 +190,8 @@ export function RhythmGrid({ user, clips, track }: {
   
   const nextNoteTimeRef = useRef<number>(0);
   const currentStepRef = useRef<number>(0);
-  const lookAheadTime = 0.1; // 100ms lookahead
-  const scheduleInterval = 25; // 25ms polling
+  const lookAheadTime = 0.1; 
+  const scheduleInterval = 25; 
 
   const initAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
@@ -287,7 +287,6 @@ export function RhythmGrid({ user, clips, track }: {
       gainNode.gain.setValueAtTime(settings.volume, Math.max(startTime + duration - settings.release, startTime + settings.attack));
       gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
 
-      // Effects Routing
       source.connect(filterNode);
       filterNode.connect(distortionNode);
       
@@ -299,9 +298,8 @@ export function RhythmGrid({ user, clips, track }: {
       gainNode.connect(panNode);
       panNode.connect(masterAnalyserRef.current || ctx.destination);
 
-      // Simple Delay Logic (Neural Space)
       if (settings.delay > 0) {
-        delayNode.delayTime.value = 0.25; // 1/4 note approx
+        delayNode.delayTime.value = 0.25; 
         delayGain.gain.value = settings.delay * 0.5;
         panNode.connect(delayNode);
         delayNode.connect(delayGain);
@@ -315,7 +313,6 @@ export function RhythmGrid({ user, clips, track }: {
     }
   }, [clips, loadAudio, initAudioContext, channelSettings]);
 
-  // High-Precision Scheduler
   const scheduleNextNote = useCallback(() => {
     const ctx = initAudioContext();
     const secondsPerBeat = 60.0 / bpm;
@@ -333,7 +330,6 @@ export function RhythmGrid({ user, clips, track }: {
       nextNoteTimeRef.current += secondsPerStep;
       currentStepRef.current = (currentStepRef.current + 1) % numSteps;
       
-      // Update UI (approximately)
       setTimeout(() => setCurrentStep(stepToSchedule), (nextNoteTimeRef.current - ctx.currentTime) * 1000);
     }
   }, [bpm, grid, numChannels, numSteps, playClip, initAudioContext]);
@@ -464,7 +460,7 @@ export function RhythmGrid({ user, clips, track }: {
           const chKey = chIdx.toString();
           const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
           const selId = selectedClipsForChannel[chKey] || '';
-          const isActive = chIdx.toString() === "0" && currentStep !== -1; // Visualization only
+          const isActive = chIdx.toString() === "0" && currentStep !== -1; 
 
           return (
             <div key={chIdx} className={cn("flex items-center gap-8 transition-all duration-500", isActive ? "translate-x-2" : "")}>
@@ -517,7 +513,6 @@ export function RhythmGrid({ user, clips, track }: {
                        </DialogHeader>
                        
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 py-10 max-h-[70vh] overflow-y-auto pr-4 custom-scrollbar">
-                          {/* Modifiers Section */}
                           <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
                              <div className="absolute top-0 right-0 p-4">
                                 <Waves className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
@@ -557,7 +552,6 @@ export function RhythmGrid({ user, clips, track }: {
                              </div>
                           </div>
 
-                          {/* Envelope Section */}
                           <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
                              <div className="absolute top-0 right-0 p-4">
                                 <Timer className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
@@ -584,7 +578,6 @@ export function RhythmGrid({ user, clips, track }: {
                              </div>
                           </div>
 
-                          {/* Sound Shaping Section */}
                           <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
                              <div className="absolute top-0 right-0 p-4">
                                 <Sparkles className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
@@ -615,7 +608,6 @@ export function RhythmGrid({ user, clips, track }: {
                              </div>
                           </div>
 
-                          {/* Spatial Section */}
                           <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
                              <div className="absolute top-0 right-0 p-4">
                                 <ArrowRightLeft className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
