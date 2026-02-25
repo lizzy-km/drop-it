@@ -1,13 +1,14 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
   Play, Square, Music, Save, Download, Plus, Trash2, 
   Loader2, Zap, Waves, Sparkles, Mic2, VolumeX, Volume2, 
   RotateCcw, Scissors, Timer, Settings, Volume1, Maximize2, 
-  Gauge, BrainCircuit, Wand2, Activity, Sliders, Repeat
+  Gauge, BrainCircuit, Wand2, Activity, Sliders, Repeat,
+  ChevronRight, ArrowRightLeft
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
@@ -48,6 +49,56 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   trimEnd: 1,
 };
 
+// --- KINETIC VISUAL COMPONENTS ---
+
+const VisualEnvelope = ({ attack, release }: { attack: number, release: number }) => {
+  // attack: 0-2s, release: 0-2s. Normalized for visual 0-1
+  const a = (attack / 2) * 100;
+  const r = (release / 2) * 100;
+  
+  return (
+    <div className="h-32 w-full bg-black/60 rounded-[2rem] border border-primary/10 overflow-hidden relative shadow-inner">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
+        <defs>
+          <linearGradient id="env-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.4" />
+            <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path 
+          d={`M 0 100 L ${a} 0 L ${100 - r} 0 L 100 100 Z`}
+          fill="url(#env-grad)"
+          stroke="hsl(var(--primary))"
+          strokeWidth="2"
+          className="transition-all duration-500 ease-out"
+        />
+        <circle cx={a} cy="0" r="2" fill="white" className="animate-pulse" />
+        <circle cx={100 - r} cy="0" r="2" fill="white" className="animate-pulse" />
+      </svg>
+      <div className="absolute bottom-2 left-4 text-[8px] font-black uppercase text-primary/40 tracking-widest">Envelope_A/R</div>
+    </div>
+  );
+};
+
+const VisualTrim = ({ start, end }: { start: number, end: number }) => {
+  return (
+    <div className="h-24 w-full bg-black/60 rounded-[2rem] border border-primary/10 overflow-hidden relative shadow-inner group">
+      <div className="absolute inset-0 opacity-20 flex items-center justify-around pointer-events-none">
+        {Array.from({ length: 20 }).map((_, i) => (
+          <div key={i} className="w-0.5 bg-primary" style={{ height: `${20 + Math.random() * 60}%` }} />
+        ))}
+      </div>
+      <div 
+        className="absolute h-full bg-primary/20 border-x border-primary/60 transition-all duration-300"
+        style={{ left: `${start * 100}%`, right: `${(1 - end) * 100}%` }}
+      >
+        <div className="absolute inset-0 studio-grid-bg opacity-30" />
+      </div>
+      <div className="absolute bottom-2 left-4 text-[8px] font-black uppercase text-primary/40 tracking-widest">Trim_Slice</div>
+    </div>
+  );
+};
+
 const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(null);
@@ -72,8 +123,22 @@ const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }) => {
 
       for (let i = 0; i < bufferLength; i++) {
         barHeight = (dataArray[i] / 255) * canvas.height;
-        ctx.fillStyle = `rgba(250, 204, 21, ${dataArray[i] / 255})`;
+        
+        const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
+        gradient.addColorStop(0, 'rgba(250, 204, 21, 0.1)');
+        gradient.addColorStop(1, 'rgba(250, 204, 21, 0.8)');
+        
+        ctx.fillStyle = gradient;
         ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+        
+        // Glow effect
+        if (dataArray[i] > 200) {
+          ctx.shadowBlur = 15;
+          ctx.shadowColor = 'rgba(250, 204, 21, 0.5)';
+        } else {
+          ctx.shadowBlur = 0;
+        }
+
         x += barWidth + 1;
       }
     };
@@ -84,13 +149,15 @@ const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }) => {
 
   return (
     <div className="h-24 w-full bg-black/40 rounded-[2rem] overflow-hidden border border-primary/10 relative shadow-inner">
-      <canvas ref={canvasRef} width={800} height={100} className="w-full h-full opacity-60" />
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <Activity className="w-4 h-4 text-primary/20" />
+      <canvas ref={canvasRef} width={800} height={100} className="w-full h-full" />
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+        <Activity className="w-4 h-4 text-primary" />
       </div>
     </div>
   );
 };
+
+// --- MAIN RHYTHM COMPONENT ---
 
 export function RhythmGrid({ user, clips, track }: {
   user: User;
@@ -212,7 +279,7 @@ export function RhythmGrid({ user, clips, track }: {
       source.connect(filterNode);
       filterNode.connect(gainNode);
       gainNode.connect(panNode);
-      panNode.connect(masterAnalyserRef.current?.parentElement || ctx.destination);
+      gainNode.connect(masterAnalyserRef.current?.parentElement || ctx.destination);
 
       source.start(startTime, trimStartOffset, duration);
     } catch (e) {
@@ -397,14 +464,20 @@ export function RhythmGrid({ user, clips, track }: {
                     </DialogTrigger>
                     <DialogContent className="max-w-4xl glass-panel border-primary/20 rounded-[3rem] p-12 gold-shadow">
                        <DialogHeader>
-                          <DialogTitle className="text-4xl font-black italic text-primary tracking-tighter uppercase flex items-center gap-4">
-                            <Maximize2 className="w-8 h-8" /> Sampler_Lab
+                          <DialogTitle className="text-4xl font-black italic text-primary tracking-tighter uppercase flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <Maximize2 className="w-8 h-8" /> Sampler_Lab
+                            </div>
+                            <span className="text-[10px] tracking-[0.4em] font-black text-primary/40">Channel_{chIdx}</span>
                           </DialogTitle>
                        </DialogHeader>
                        
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 py-10 max-h-[70vh] overflow-y-auto pr-4 custom-scrollbar">
                           {/* Modifiers Section */}
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[2rem] border border-white/5">
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
+                             <div className="absolute top-0 right-0 p-4">
+                                <Waves className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
+                             </div>
                              <div className="flex justify-between items-center">
                                <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Signal_Modifiers</h4>
                                <div className="flex items-center gap-3">
@@ -412,6 +485,9 @@ export function RhythmGrid({ user, clips, track }: {
                                   <Switch checked={s.reversed} onCheckedChange={(v) => updateChannelSetting(chKey, 'reversed', v)} />
                                </div>
                              </div>
+
+                             <VisualTrim start={s.trimStart} end={s.trimEnd} />
+
                              <div className="space-y-6">
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
@@ -429,7 +505,7 @@ export function RhythmGrid({ user, clips, track }: {
                                 </div>
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Auto_Tune</span>
+                                      <span>Auto_Tune_Quantization</span>
                                       <span className="text-primary">{Math.round(s.autoTune * 100)}%</span>
                                    </div>
                                    <Slider value={[s.autoTune * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'autoTune', v[0] / 100)} />
@@ -438,19 +514,25 @@ export function RhythmGrid({ user, clips, track }: {
                           </div>
 
                           {/* Envelope Section */}
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[2rem] border border-white/5">
-                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Envelope_ADSR</h4>
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
+                             <div className="absolute top-0 right-0 p-4">
+                                <Timer className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
+                             </div>
+                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Envelope_Dynamics</h4>
+                             
+                             <VisualEnvelope attack={s.attack} release={s.release} />
+
                              <div className="space-y-6">
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Attack</span>
+                                      <span>Attack_Signal</span>
                                       <span className="text-primary">{s.attack.toFixed(2)}s</span>
                                    </div>
                                    <Slider value={[s.attack * 100]} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'attack', v[0] / 100)} />
                                 </div>
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Release</span>
+                                      <span>Release_Signal</span>
                                       <span className="text-primary">{s.release.toFixed(2)}s</span>
                                    </div>
                                    <Slider value={[s.release * 100]} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'release', v[0] / 100)} />
@@ -459,8 +541,11 @@ export function RhythmGrid({ user, clips, track }: {
                           </div>
 
                           {/* Sound Shaping Section */}
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[2rem] border border-white/5">
-                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Harmonics_Shape</h4>
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
+                             <div className="absolute top-0 right-0 p-4">
+                                <Sparkles className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
+                             </div>
+                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Harmonics_Engine</h4>
                              <div className="space-y-6">
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
@@ -474,11 +559,14 @@ export function RhythmGrid({ user, clips, track }: {
                                       <span>Filter_Cutoff</span>
                                       <span className="text-primary">{Math.round(s.cutoff * 100)}%</span>
                                    </div>
-                                   <Slider value={[s.cutoff * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'cutoff', v[0] / 100)} />
+                                   <div className="relative group/cutoff">
+                                      <div className="absolute inset-0 bg-primary/5 blur-xl group-hover/cutoff:bg-primary/10 transition-colors rounded-full" />
+                                      <Slider value={[s.cutoff * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'cutoff', v[0] / 100)} className="relative z-10" />
+                                   </div>
                                 </div>
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Drive_Saturation</span>
+                                      <span>Drive_Distortion</span>
                                       <span className="text-primary">{Math.round(s.distortion * 100)}%</span>
                                    </div>
                                    <Slider value={[s.distortion * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'distortion', v[0] / 100)} />
@@ -487,22 +575,29 @@ export function RhythmGrid({ user, clips, track }: {
                           </div>
 
                           {/* Spatial Section */}
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[2rem] border border-white/5">
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
+                             <div className="absolute top-0 right-0 p-4">
+                                <ArrowRightLeft className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
+                             </div>
                              <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Spatial_Field</h4>
                              <div className="space-y-6">
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Stereo_Pan</span>
-                                      <span className="text-primary">{s.pan.toFixed(2)}</span>
+                                      <span>Stereo_Panning</span>
+                                      <span className="text-primary">{s.pan > 0 ? 'R ' : s.pan < 0 ? 'L ' : ''}{Math.abs(s.pan).toFixed(2)}</span>
                                    </div>
-                                   <Slider value={[s.pan * 50 + 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chKey, 'pan', (v[0] - 50) / 50)} />
+                                   <div className="flex items-center gap-4">
+                                      <span className="text-[8px] font-bold opacity-20">L</span>
+                                      <Slider value={[s.pan * 50 + 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chKey, 'pan', (v[0] - 50) / 50)} className="flex-1" />
+                                      <span className="text-[8px] font-bold opacity-20">R</span>
+                                   </div>
                                 </div>
                                 <div className="pt-6">
                                    <Button 
-                                      className="w-full h-16 rounded-[1.5rem] bg-primary text-black font-black uppercase tracking-widest hover:bg-primary/90 shadow-2xl"
+                                      className="w-full h-20 rounded-[1.5rem] bg-primary text-black font-black uppercase tracking-[0.3em] hover:bg-primary/90 shadow-2xl transition-all group/audition"
                                       onClick={() => { if (selId) playClip(selId, chKey); }}
                                    >
-                                      <Play className="w-5 h-5 mr-3 fill-current" /> Audition_Signal
+                                      <Play className="w-6 h-6 mr-3 fill-current group-hover/audition:scale-125 transition-transform" /> Audition_Signal
                                    </Button>
                                 </div>
                              </div>
@@ -510,8 +605,11 @@ export function RhythmGrid({ user, clips, track }: {
                        </div>
                        
                        <DialogFooter className="pt-8 border-t border-white/5">
-                          <Button className="w-full h-14 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.4em] hover:bg-primary hover:text-black transition-all">
-                             Sync_Channel_State
+                          <Button 
+                            className="w-full h-14 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.4em] hover:bg-primary hover:text-black transition-all"
+                            onClick={() => toast({ title: "Neural Synchronization Complete" })}
+                          >
+                             Commit_Changes
                           </Button>
                        </DialogFooter>
                     </DialogContent>
@@ -579,4 +677,3 @@ export function RhythmGrid({ user, clips, track }: {
     </div>
   );
 }
-
