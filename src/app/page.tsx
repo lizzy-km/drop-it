@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { db, User } from '@/lib/db';
-import { UserPlus, ArrowRight, Activity, Zap } from 'lucide-react';
+import { UserPlus, ArrowRight, Activity, Zap, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Logo } from '@/components/brand/logo';
@@ -12,6 +12,15 @@ import { Logo } from '@/components/brand/logo';
 export default function LandingPage() {
   const [users, setUsers] = useState<User[]>([]);
   const router = useRouter();
+
+  const appFeatures = [
+    "Sample-Accurate Look-Ahead Engine",
+    "Surgical Sampler Visualizer",
+    "High-Fidelity WAV Mastering",
+    "Portable Project JSON Export",
+    "Algorithmic Rhythm Workbench",
+    "Neural Signal Capture"
+  ];
 
   useEffect(() => {
     setUsers(db.getUsers());
@@ -38,11 +47,10 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-foreground flex flex-col items-center justify-center p-6 relative overflow-hidden studio-grid-bg">
-      {/* Cinematic Neural Paths */}
       <div className="absolute top-[-20%] left-[-10%] w-[80%] h-[80%] bg-primary/10 rounded-full blur-[160px] pointer-events-none animate-pulse-gold" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-primary/5 rounded-full blur-[140px] pointer-events-none" />
       
-      <div className="max-w-6xl w-full flex flex-col items-center text-center space-y-24 relative z-10">
+      <div className="max-w-6xl w-full flex flex-col items-center text-center space-y-20 relative z-10 py-20">
         <div className="space-y-12 max-w-4xl flex flex-col items-center">
           <div className="animate-in fade-in zoom-in duration-1000">
             <Logo size={120} />
@@ -53,14 +61,23 @@ export default function LandingPage() {
               <Zap className="w-4 h-4 text-primary" />
               Neural_Rhythm_Engine_Active
             </div>
-            <h1 className="text-8xl md:text-[12rem] font-black tracking-[-0.05em] leading-none animate-in fade-in slide-in-from-top-12 duration-1000">
+            <h1 className="text-8xl md:text-[10rem] font-black tracking-[-0.05em] leading-none animate-in fade-in slide-in-from-top-12 duration-1000">
               DROP <span className="text-primary italic">IT.</span>
             </h1>
             <p className="text-2xl md:text-3xl text-muted-foreground font-medium max-w-3xl mx-auto leading-relaxed animate-in fade-in duration-1000 delay-300">
-              The world's most advanced neural workspace for sonic architecture. 
-              Record. Synthesize. Manifest.
+              The world's most advanced neural workstation for sonic architecture. 
             </p>
           </div>
+        </div>
+
+        {/* Features List Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full max-w-4xl">
+          {appFeatures.map((feature, i) => (
+            <div key={i} className="flex items-center gap-3 bg-white/5 border border-white/10 p-4 rounded-2xl animate-in fade-in slide-in-from-bottom-4" style={{ animationDelay: `${i * 0.1}s` }}>
+              <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-left leading-tight">{feature}</span>
+            </div>
+          ))}
         </div>
 
         <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pt-12">

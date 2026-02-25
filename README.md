@@ -1,3 +1,4 @@
+
 # 🎧 DROP IT | Rhythm & Voice Studio
 
 Welcome to the **Drop It** codebase! This is a high-performance, minimalist DAW (Digital Audio Workstation) built for the web, designed for professional-grade sonic architecture.
@@ -11,6 +12,11 @@ Welcome to the **Drop It** codebase! This is a high-performance, minimalist DAW 
 - **Surgical Sampler Lab:** Kinetic visualizers for ADSR envelopes and waveform trimming.
 - **Mastering & Portability:** High-fidelity WAV export and portable JSON project configurations.
 - **Minimalist UI:** A high-intensity, "Neural" workspace for zero-friction production.
+
+---
+
+## ✨ Features
+**features:** ["Sample-Accurate Look-Ahead Engine", "Surgical Sampler Visualizer", "High-Fidelity WAV Mastering", "Portable Project JSON Export", "Algorithmic Rhythm Workbench", "Neural Signal Capture"]
 
 ---
 
@@ -36,24 +42,6 @@ Replaces traditional AI with algorithmic rhythm tools:
 - **Randomize:** Generates rhythmic patterns based on user-defined instrument streams.
 - **Nudge (Shift):** Shifts grid data forward or backward for micro-timing and syncopation.
 - **Mirroring:** Instantly clones half-patterns to create consistent 16/32 step loops.
-
----
-
-## 🇲🇲 မြန်မာလို ရှင်းလင်းချက် (Professional Logic)
-
-ဒီ Project ရဲ့ အဆင့်မြင့် အလုပ်လုပ်ပုံကို အောက်မှာ ရှင်းပြထားပါတယ်-
-
-### ၁။ အသံ Engine (Professional Scheduling)
-သာမန် `setInterval` ကို မသုံးဘဲ Browser ရဲ့ Audio Clock ကို တိုက်ရိုက်ယူသုံးထားပါတယ်။ အသံတွေဟာ စက္ကန့်မလွဲဘဲ တိကျစွာ ထွက်ပေါ်လာမှာ ဖြစ်ပြီး UI မှာ ဘာလုပ်လုပ် စည်းချက် မပျက်အောင် ဖန်တီးထားပါတယ်။
-
-### ၂။ Sampler Lab (အသံ ပြုပြင်ခြင်း)
-အသံတစ်ခုချင်းစီကို စိတ်ကြိုက် ပြုပြင်နိုင်ဖို့ **Visual ADSR** နဲ့ **Trim** စနစ်တွေ ထည့်ထားပါတယ်။ အသံရဲ့ အစ/အဆုံးကို ပုံနဲ့ကြည့်ပြီး ညှိနိုင်သလို၊ **Auto-Tune** နဲ့ **Distortion** တွေကိုလည်း Studio-grade အဆင့်ထိ သုံးနိုင်ပါတယ်။
-
-### ၃။ Project သိမ်းဆည်းခြင်း (Export/Import)
-မိမိဖန်တီးထားတဲ့ သီချင်းတွေကို စာသားဖိုင် (JSON) အဖြစ် ဖုန်းထဲကို သိမ်းထားနိုင်ပါတယ်။ အခြားဖုန်းမှာလည်း အဲဒီဖိုင်ကို ပြန်ဖွင့်ရင် အသံတွေနဲ့ Grid တွေ အကုန် အရင်အတိုင်း ပြန်ပေါ်လာမှာပါ။
-
-### ၄။ အသံဖိုင် ထုတ်ယူခြင်း (WAV Master)
-သီချင်းပြီးရင် ဖုန်းထဲကို High-quality `.wav` အနေနဲ့ download ဆွဲနိုင်ပါတယ်။ Browser ရဲ့ နောက်ကွယ်မှာ အသံတွေကို Master လုပ်ပေးတဲ့ Offline Render စနစ်ကို သုံးထားတာပါ။
 
 ---
 
