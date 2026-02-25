@@ -50,6 +50,53 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   trimEnd: 1,
 };
 
+// --- WAV ENCODING UTILITY ---
+function audioBufferToWav(buffer: AudioBuffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const format = 1; // PCM
+  const bitDepth = 16;
+  
+  const blockAlign = numChannels * bitDepth / 8;
+  const byteRate = sampleRate * blockAlign;
+  const length = buffer.length * numChannels * 2;
+  const bufferLength = 44 + length;
+  
+  const arrayBuffer = new ArrayBuffer(bufferLength);
+  const view = new DataView(arrayBuffer);
+  
+  const writeString = (offset: number, string: string) => {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  };
+  
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + length, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, format, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  writeString(36, 'data');
+  view.setUint32(40, length, true);
+  
+  let offset = 44;
+  for (let i = 0; i < buffer.length; i++) {
+    for (let channel = 0; channel < numChannels; channel++) {
+      const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += 2;
+    }
+  }
+  
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
+}
+
 // --- KINETIC VISUAL COMPONENTS ---
 
 const VisualEnvelope = ({ attack, release }: { attack: number, release: number }) => {
@@ -165,6 +212,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   onSaveTrack: (t: Track) => void;
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
   const [bpm, setBpm] = useState(track?.bpm || 120);
   const [numSteps, setNumSteps] = useState(track?.numSteps || 16);
@@ -210,9 +258,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     return audioContextRef.current;
   }, []);
 
-  const loadAudio = useCallback(async (clip: AudioClip) => {
+  const loadAudio = useCallback(async (clip: AudioClip, context?: BaseAudioContext) => {
     if (audioBuffersRef.current[clip.id]) return audioBuffersRef.current[clip.id];
-    const ctx = initAudioContext();
+    const ctx = context || initAudioContext();
     try {
       const res = await fetch(clip.audioData);
       const arrayBuffer = await res.arrayBuffer();
@@ -237,7 +285,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     return curve;
   };
 
-  const playClip = useCallback(async (clipId: string, channelIdx: string, scheduledTime?: number) => {
+  const playClip = useCallback(async (clipId: string, channelIdx: string, scheduledTime?: number, context?: BaseAudioContext) => {
     const settings = channelSettings[channelIdx] || DEFAULT_CHANNEL_SETTINGS;
     if (settings.muted && !scheduledTime) return;
 
@@ -245,9 +293,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     if (!clip) return;
 
     try {
-      const ctx = initAudioContext();
-      if (ctx.state === 'suspended') await ctx.resume();
-      let buffer = await loadAudio(clip);
+      const ctx = context || initAudioContext();
+      if (ctx instanceof AudioContext && ctx.state === 'suspended') await ctx.resume();
+      
+      let buffer = await loadAudio(clip, ctx);
       if (!buffer) return;
 
       if (settings.reversed) {
@@ -277,7 +326,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       panNode.pan.value = settings.pan;
       filterNode.frequency.value = 200 + (Math.pow(settings.cutoff, 2) * 19800);
 
-      const startTime = scheduledTime || ctx.currentTime;
+      const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
       const duration = (buffer.duration * (settings.trimEnd - settings.trimStart)) / playbackRate;
       const trimStartOffset = settings.trimStart * buffer.duration;
 
@@ -295,7 +344,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
       distortionNode.connect(gainNode);
       gainNode.connect(panNode);
-      panNode.connect(masterAnalyserRef.current || ctx.destination);
+      
+      // Routing logic for real-time vs offline
+      const destination = context ? context.destination : (masterAnalyserRef.current || ctx.destination);
+      panNode.connect(destination);
 
       if (settings.delay > 0) {
         delayNode.delayTime.value = 0.25; 
@@ -303,7 +355,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         panNode.connect(delayNode);
         delayNode.connect(delayGain);
         delayGain.connect(delayNode);
-        delayGain.connect(masterAnalyserRef.current || ctx.destination);
+        delayGain.connect(destination);
       }
 
       source.start(startTime, trimStartOffset, duration);
@@ -539,6 +591,50 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     reader.readAsText(file);
   };
 
+  const handleExportAudio = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    
+    try {
+      const secondsPerBeat = 60.0 / bpm;
+      const secondsPerStep = secondsPerBeat / 4;
+      const totalDuration = numSteps * secondsPerStep;
+      
+      const offlineCtx = new OfflineAudioContext(2, 44100 * totalDuration, 44100);
+      
+      // Schedule all clips on the offline context
+      for (let s = 0; s < numSteps; s++) {
+        const timeOffset = s * secondsPerStep;
+        for (let c = 0; c < numChannels; c++) {
+          const clipIds = grid[`${c}-${s}`];
+          if (clipIds) {
+            for (const id of clipIds) {
+              await playClip(id, c.toString(), timeOffset, offlineCtx);
+            }
+          }
+        }
+      }
+
+      const renderedBuffer = await offlineCtx.startRendering();
+      const wavBlob = audioBufferToWav(renderedBuffer);
+      const url = URL.createObjectURL(wavBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title.replace(/\s+/g, '_')}_Master.wav`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({ title: "Audio Mastered", description: "WAV file exported successfully." });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Mastering Failed", description: "Acoustic neural path interrupted.", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-12">
       <div className="glass-panel p-10 rounded-[3rem] gold-shadow relative overflow-hidden group">
@@ -617,6 +713,14 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                    <FileUp className="w-5 h-5" />
                  </Button>
                </div>
+               <Button 
+                size="icon" 
+                className="w-12 h-12 rounded-2xl gold-border bg-primary/20 text-primary hover:bg-primary/40" 
+                onClick={handleExportAudio}
+                disabled={isExporting}
+               >
+                 {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+               </Button>
                {track?.id && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
