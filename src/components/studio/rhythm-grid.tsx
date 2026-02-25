@@ -20,6 +20,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { makeDistortionCurve, audioBufferToWav } from '@/lib/audio-utils';
+import { MasterVisualizer, VisualEnvelope, VisualTrim } from './visualizers';
 
 const DEFAULT_CHANNELS = 4;
 const MAX_STEPS = 64;
@@ -50,171 +52,18 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   trimEnd: 1,
 };
 
-// --- WAV ENCODING UTILITY ---
-function audioBufferToWav(buffer: AudioBuffer) {
-  const numChannels = buffer.numberOfChannels;
-  const sampleRate = buffer.sampleRate;
-  const format = 1; // PCM
-  const bitDepth = 16;
-  
-  const blockAlign = numChannels * bitDepth / 8;
-  const byteRate = sampleRate * blockAlign;
-  const length = buffer.length * numChannels * 2;
-  const bufferLength = 44 + length;
-  
-  const arrayBuffer = new ArrayBuffer(bufferLength);
-  const view = new DataView(arrayBuffer);
-  
-  const writeString = (offset: number, string: string) => {
-    for (let i = 0; i < string.length; i++) {
-      view.setUint8(offset + i, string.charCodeAt(i));
-    }
-  };
-  
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + length, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, format, true);
-  view.setUint16(22, numChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, byteRate, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bitDepth, true);
-  writeString(36, 'data');
-  view.setUint32(40, length, true);
-  
-  let offset = 44;
-  for (let i = 0; i < buffer.length; i++) {
-    for (let channel = 0; channel < numChannels; channel++) {
-      const sample = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[i]));
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
-      offset += 2;
-    }
-  }
-  
-  return new Blob([arrayBuffer], { type: 'audio/wav' });
-}
-
-// --- KINETIC VISUAL COMPONENTS ---
-
-const VisualEnvelope = ({ attack, release }: { attack: number, release: number }) => {
-  const a = (attack / 2) * 100;
-  const r = (release / 2) * 100;
-  
-  return (
-    <div className="h-32 w-full bg-black/60 rounded-[0] border border-primary/10 overflow-hidden relative shadow-inner">
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
-        <defs>
-          <linearGradient id="env-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path 
-          d={`M 0 100 L ${a} 0 L ${100 - r} 0 L 100 100 Z`}
-          fill="url(#env-grad)"
-          stroke="hsl(var(--primary))"
-          strokeWidth="2"
-          className="transition-all duration-500 ease-out"
-        />
-        <circle cx={a} cy="0" r="2" fill="white" className="animate-pulse" />
-        <circle cx={100 - r} cy="0" r="2" fill="white" className="animate-pulse" />
-      </svg>
-      <div className="absolute bottom-2 left-4 text-[8px] font-black uppercase text-primary/40 tracking-widest">Envelope_A/R</div>
-    </div>
-  );
-};
-
-const VisualTrim = ({ start, end }: { start: number, end: number }) => {
-  return (
-    <div className="h-24 w-full bg-black/60 rounded-[0] border border-primary/10 overflow-hidden relative shadow-inner group">
-      <div className="absolute inset-0 opacity-20 flex items-center justify-around pointer-events-none">
-        {Array.from({ length: 20 }).map((_, i) => (
-          <div key={i} className="w-0.5 bg-primary" style={{ height: `${20 + Math.random() * 60}%` }} />
-        ))}
-      </div>
-      <div 
-        className="absolute h-full bg-primary/20 border-x border-primary/60 transition-all duration-300"
-        style={{ left: `${start * 100}%`, right: `${(1 - end) * 100}%` }}
-      >
-        <div className="absolute inset-0 studio-grid-bg opacity-30" />
-      </div>
-      <div className="absolute bottom-2 left-4 text-[8px] font-black uppercase text-primary/40 tracking-widest">Trim_Slice</div>
-    </div>
-  );
-};
-
-const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number>(null);
-
-  useEffect(() => {
-    if (!analyser || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
-    const draw = () => {
-      animationRef.current = requestAnimationFrame(draw);
-      analyser.getByteFrequencyData(dataArray);
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const barWidth = (canvas.width / bufferLength) * 2.5;
-      let barHeight;
-      let x = 0;
-
-      // Calculate peak for VU meter
-      let maxVal = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        if (dataArray[i] > maxVal) maxVal = dataArray[i];
-        barHeight = (dataArray[i] / 255) * canvas.height;
-        
-        const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
-        gradient.addColorStop(0, 'rgba(250, 204, 21, 0.1)');
-        gradient.addColorStop(1, 'rgba(250, 204, 21, 0.8)');
-        
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-        x += barWidth + 1;
-      }
-
-      // Draw Peak Meter Overlay
-      const peakPercent = maxVal / 255;
-      ctx.fillStyle = peakPercent > 0.9 ? 'rgba(239, 68, 68, 0.8)' : 'rgba(250, 204, 21, 0.4)';
-      ctx.fillRect(canvas.width - 20, canvas.height * (1 - peakPercent), 10, canvas.height * peakPercent);
-    };
-
-    draw();
-    return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
-  }, [analyser]);
-
-  return (
-    <div className="h-24 w-full bg-black/40 rounded-[1rem] overflow-hidden border border-primary/10 relative shadow-inner">
-      <canvas ref={canvasRef} width={800} height={100} className="w-full h-full" />
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
-        <Activity className="w-4 h-4 text-primary" />
-      </div>
-    </div>
-  );
-};
-
-// --- MAIN RHYTHM COMPONENT ---
-
-export function RhythmGrid({ user, clips, track, onSaveTrack }: {
+export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }: {
   user: User;
   clips: AudioClip[];
   track?: Track;
   onSaveTrack: (t: Track) => void;
+  onImportRefresh?: () => void;
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
   const [bpm, setBpm] = useState(track?.bpm || 120);
+  const [bpmInput, setBpmInput] = useState((track?.bpm || 120).toString());
   const [numSteps, setNumSteps] = useState(track?.numSteps || 16);
   const [numChannels, setNumChannels] = useState(track?.numChannels || DEFAULT_CHANNELS);
   const [grid, setGrid] = useState<Record<string, string[]>>(track?.grid || {});
@@ -272,18 +121,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       return null;
     }
   }, [initAudioContext]);
-
-  const makeDistortionCurve = (amount: number) => {
-    const k = amount * 100;
-    const n_samples = 44100;
-    const curve = new Float32Array(n_samples);
-    const deg = Math.PI / 180;
-    for (let i = 0; i < n_samples; ++i) {
-      const x = (i * 2) / n_samples - 1;
-      curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
-    }
-    return curve;
-  };
 
   const playClip = useCallback(async (clipId: string, channelIdx: string, scheduledTime?: number, context?: BaseAudioContext) => {
     const settings = channelSettings[channelIdx] || DEFAULT_CHANNEL_SETTINGS;
@@ -345,7 +182,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       distortionNode.connect(gainNode);
       gainNode.connect(panNode);
       
-      // Routing logic for real-time vs offline
       const destination = context ? context.destination : (masterAnalyserRef.current || ctx.destination);
       panNode.connect(destination);
 
@@ -397,8 +233,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     }
     return () => { if (schedulerTimerRef.current) clearInterval(schedulerTimerRef.current); };
   }, [isPlaying, scheduleNextNote, initAudioContext]);
-
-  // --- PATTERN WORKBENCH TOOLS ---
 
   const randomizePattern = () => {
     setGrid({});
@@ -466,7 +300,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     const newSettings: Record<string, ChannelSettings> = {};
     const newSelectedClips: Record<string, string> = {};
 
-    // Remap grid indices
     Object.keys(grid).forEach(key => {
       const [c, s] = key.split('-').map(Number);
       if (c < chIdx) {
@@ -476,7 +309,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       }
     });
 
-    // Remap settings and selections
     for (let i = 0; i < numChannels; i++) {
       if (i < chIdx) {
         newSettings[i.toString()] = channelSettings[i.toString()];
@@ -503,8 +335,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       toast({ title: "Error", description: "Project not found in database.", variant: "destructive" });
     }
   };
-
-  // --- CORE SYSTEM ACTIONS ---
 
   const updateChannelSetting = (idx: string, key: keyof ChannelSettings, val: any) => {
     setChannelSettings(p => ({ ...p, [idx]: { ...p[idx], [key]: val } }));
@@ -587,6 +417,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         db.saveTrack(importedTrack);
         
         toast({ title: "Config Imported", description: "Re-syncing neural paths..." });
+        if (onImportRefresh) onImportRefresh();
         window.location.href = `/studio?id=${importedTrack.id}`;
       } catch (err) {
         toast({ title: "Import Failed", description: "Corrupted or invalid config file.", variant: "destructive" });
@@ -606,7 +437,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       
       const offlineCtx = new OfflineAudioContext(2, 44100 * totalDuration, 44100);
       
-      // Schedule all clips on the offline context
       for (let s = 0; s < numSteps; s++) {
         const timeOffset = s * secondsPerStep;
         for (let c = 0; c < numChannels; c++) {
@@ -638,6 +468,32 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       setIsExporting(false);
     }
   };
+
+  const handleBpmInputChange = (valStr: string) => {
+    setBpmInput(valStr);
+    const val = parseInt(valStr);
+    if (!isNaN(val) && val >= 10 && val <= 400) {
+      setBpm(val);
+    }
+  };
+
+  const handleBpmInputBlur = () => {
+    const val = parseInt(bpmInput);
+    if (isNaN(val) || val < 60) {
+      setBpm(60);
+      setBpmInput("60");
+    } else if (val > 200) {
+      setBpm(200);
+      setBpmInput("200");
+    } else {
+      setBpm(val);
+      setBpmInput(val.toString());
+    }
+  };
+
+  useEffect(() => {
+    setBpmInput(bpm.toString());
+  }, [bpm]);
 
   return (
     <div className="space-y-12">
@@ -689,7 +545,13 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
           <div className="flex items-center gap-6">
             <div className="flex flex-col items-center gap-2">
                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">TEMPO</span>
-               <div className="bg-black/40 px-6 py-4 rounded-2xl border border-white/5 font-black text-2xl text-primary">{bpm}</div>
+               <input 
+                  type="text"
+                  value={bpmInput}
+                  onChange={(e) => handleBpmInputChange(e.target.value)}
+                  onBlur={handleBpmInputBlur}
+                  className="bg-black/40 w-24 px-4 py-4 rounded-2xl border border-white/5 font-black text-2xl text-primary text-center outline-none focus:border-primary/50 transition-colors"
+               />
                <Slider value={[bpm]} min={60} max={200} onValueChange={(v) => setBpm(v[0])} className="w-32 h-1.5" />
             </div>
             
