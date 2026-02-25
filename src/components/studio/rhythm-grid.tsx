@@ -7,8 +7,9 @@ import {
   Play, Square, Music, Save, Download, Plus, Trash2, 
   Loader2, Zap, Waves, Sparkles, Mic2, VolumeX, Volume2, 
   RotateCcw, Scissors, Timer, Settings, Volume1, Maximize2, 
-  Gauge, BrainCircuit, Wand2, Activity, Sliders, Repeat,
-  ChevronRight, ArrowRightLeft, FastForward, Clock, FileUp, FileDown
+  Gauge, Activity, Sliders, Repeat,
+  ChevronRight, ArrowRightLeft, FastForward, Clock, FileUp, FileDown,
+  Dices, ArrowLeft, ArrowRight, Copy, X
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
@@ -18,7 +19,6 @@ import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { generateBeat } from '@/ai/flows/generate-beat-flow';
 
 const DEFAULT_CHANNELS = 4;
 const MAX_STEPS = 64;
@@ -120,7 +120,10 @@ const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }) => {
       let barHeight;
       let x = 0;
 
+      // Calculate peak for VU meter
+      let maxVal = 0;
       for (let i = 0; i < bufferLength; i++) {
+        if (dataArray[i] > maxVal) maxVal = dataArray[i];
         barHeight = (dataArray[i] / 255) * canvas.height;
         
         const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
@@ -129,16 +132,13 @@ const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }) => {
         
         ctx.fillStyle = gradient;
         ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-        
-        if (dataArray[i] > 200) {
-          ctx.shadowBlur = 15;
-          ctx.shadowColor = 'rgba(250, 204, 21, 0.5)';
-        } else {
-          ctx.shadowBlur = 0;
-        }
-
         x += barWidth + 1;
       }
+
+      // Draw Peak Meter Overlay
+      const peakPercent = maxVal / 255;
+      ctx.fillStyle = peakPercent > 0.9 ? 'rgba(239, 68, 68, 0.8)' : 'rgba(250, 204, 21, 0.4)';
+      ctx.fillRect(canvas.width - 20, canvas.height * (1 - peakPercent), 10, canvas.height * peakPercent);
     };
 
     draw();
@@ -169,8 +169,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const [numSteps, setNumSteps] = useState(track?.numSteps || 16);
   const [numChannels, setNumChannels] = useState(track?.numChannels || DEFAULT_CHANNELS);
   const [grid, setGrid] = useState<Record<string, string[]>>(track?.grid || {});
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState('');
   const [title, setTitle] = useState(track?.title || 'SONIC_MANIFEST_01');
   
   const [channelSettings, setChannelSettings] = useState<Record<string, ChannelSettings>>(
@@ -347,6 +345,62 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     return () => { if (schedulerTimerRef.current) clearInterval(schedulerTimerRef.current); };
   }, [isPlaying, scheduleNextNote, initAudioContext]);
 
+  // --- PATTERN WORKBENCH TOOLS ---
+
+  const randomizePattern = () => {
+    if (clips.length === 0) {
+      toast({ title: "No Samples", description: "Import sounds to randomize rhythm." });
+      return;
+    }
+    const newGrid = { ...grid };
+    for (let c = 0; c < numChannels; c++) {
+      const clipId = selectedClipsForChannel[c.toString()] || clips[Math.floor(Math.random() * clips.length)].id;
+      for (let s = 0; s < numSteps; s++) {
+        // Simple probability-based randomization
+        if (Math.random() > 0.8) {
+          newGrid[`${c}-${s}`] = [clipId];
+        }
+      }
+    }
+    setGrid(newGrid);
+    toast({ title: "Pattern Randomized" });
+  };
+
+  const shiftPattern = (direction: 'left' | 'right') => {
+    const newGrid: Record<string, string[]> = {};
+    Object.keys(grid).forEach(key => {
+      const [ch, step] = key.split('-').map(Number);
+      let newStep = direction === 'right' ? (step + 1) % numSteps : (step - 1 + numSteps) % numSteps;
+      newGrid[`${ch}-${newStep}`] = grid[key];
+    });
+    setGrid(newGrid);
+  };
+
+  const mirrorPattern = () => {
+    const newGrid = { ...grid };
+    const half = Math.floor(numSteps / 2);
+    for (let c = 0; c < numChannels; c++) {
+      for (let s = 0; s < half; s++) {
+        const sourceKey = `${c}-${s}`;
+        const targetKey = `${c}-${s + half}`;
+        if (newGrid[sourceKey]) {
+          newGrid[targetKey] = [...newGrid[sourceKey]];
+        } else {
+          delete newGrid[targetKey];
+        }
+      }
+    }
+    setGrid(newGrid);
+    toast({ title: "Pattern Mirrored" });
+  };
+
+  const clearGrid = () => {
+    setGrid({});
+    toast({ title: "Grid Cleared" });
+  };
+
+  // --- CORE SYSTEM ACTIONS ---
+
   const updateChannelSetting = (idx: string, key: keyof ChannelSettings, val: any) => {
     setChannelSettings(p => ({ ...p, [idx]: { ...p[idx], [key]: val } }));
   };
@@ -451,39 +505,31 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
             />
             
             <div className="flex flex-col md:flex-row items-center gap-8">
-               <div className="flex items-center gap-4 h-[60] rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full ai-glow-input">
-                  <BrainCircuit className="w-6 h-6 text-primary animate-pulse" />
-                  <input 
-                    placeholder="DESCRIBE_THE_VIBE..."
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    className="bg-transparent border-none outline-none text-xs font-black uppercase tracking-[0.3em] text-primary w-full placeholder:text-primary/20"
-                  />
-                  <Button 
-                    variant="ghost" 
-                    onClick={async () => {
-                      if (!aiPrompt || clips.length === 0) {
-                        toast({ title: "Signal Missing", description: "Record sounds for the Architect to analyze." });
-                        return;
-                      }
-                      setIsAiLoading(true);
-                      try {
-                        const res = await generateBeat({ prompt: aiPrompt, availableClips: clips.map(c => ({ id: c.id, name: c.name })), numChannels, numSteps });
-                        setGrid(res.grid);
-                        setBpm(res.bpm);
-                        setTitle(res.title.toUpperCase());
-                        toast({ title: "Neural Pattern Manifested", className: "bg-primary text-black font-black" });
-                      } catch (e) {
-                        toast({ title: "Synthesis Error", variant: "destructive" });
-                      } finally {
-                        setIsAiLoading(false);
-                      }
-                    }}
-                    disabled={isAiLoading}
-                    className="h-10 px-6 rounded-full text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-black border border-primary/20"
-                  >
-                    {isAiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "SYNTHESIZE"}
-                  </Button>
+               <div className="flex items-center gap-4 h-[60] rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full bg-black/20">
+                  <div className="flex items-center gap-2 px-4 border-r border-primary/10">
+                    <Gauge className="w-5 h-5 text-primary" />
+                    <span className="text-[9px] font-black uppercase tracking-widest text-primary">Workbench</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={randomizePattern} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/20 border border-primary/10 gap-2">
+                      <Dices className="w-3.5 h-3.5" /> Random
+                    </Button>
+                    <div className="flex bg-black/40 rounded-xl border border-primary/10 overflow-hidden">
+                      <Button variant="ghost" size="icon" onClick={() => shiftPattern('left')} className="h-10 w-10 text-primary hover:bg-primary/20">
+                        <ArrowLeft className="w-4 h-4" />
+                      </Button>
+                      <div className="flex items-center px-3 border-x border-primary/10 text-[9px] font-black text-primary/40">SHIFT</div>
+                      <Button variant="ghost" size="icon" onClick={() => shiftPattern('right')} className="h-10 w-10 text-primary hover:bg-primary/20">
+                        <ArrowRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={mirrorPattern} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/20 border border-primary/10 gap-2">
+                      <Copy className="w-3.5 h-3.5" /> Mirror
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={clearGrid} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-500 hover:bg-red-500/10 border border-red-500/20 gap-2">
+                      <X className="w-3.5 h-3.5" /> Clear
+                    </Button>
+                  </div>
                </div>
                <div className="w-full md:w-64">
                   <MasterVisualizer analyser={masterAnalyserRef.current} />
