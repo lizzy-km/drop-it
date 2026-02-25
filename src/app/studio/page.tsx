@@ -125,7 +125,7 @@ function StudioContent() {
                      const charType = CHARACTER_TYPES.find(ct => ct.id === clip.characterType) || CHARACTER_TYPES[0];
                      const CharIcon = charType.icon;
                      return (
-                       <div key={clip.id} className="group relative bg-black/40 p-6 rounded-[2rem] hover:bg-primary/5 transition-all gold-border hover:border-primary/50 flex flex-col items-center gap-4">
+                       <div key={`${clip.id}${Math.random()}`} className="group relative bg-black/40 p-6 rounded-[2rem] hover:bg-primary/5 transition-all gold-border hover:border-primary/50 flex flex-col items-center gap-4">
                           <div className="w-16 h-16 bg-neutral-800 rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform gold-border">
                              <CharIcon className={cn("w-9 h-9", charType.color)} />
                           </div>

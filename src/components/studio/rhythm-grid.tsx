@@ -448,6 +448,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   };
 
   const clearGrid = () => {
+    if(Object.keys(grid).length === 0) {
+      toast({ title: "Grid Already Clear", description: "No neural paths detected." });
+      return;
+    }
     setGrid({});
     toast({ title: "Grid Cleared" });
   };
@@ -779,7 +783,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                     onChange={(e) => setSelectedClipsForChannel(p => ({ ...p, [chKey]: e.target.value }))}
                   >
                     <option value="" className="bg-black">SELECT_SIGNAL</option>
-                    {clips.map(c => <option key={c.id} value={c.id} className="bg-black">{c.name}</option>)}
+                    {clips.map(c => <option key={`${c.id}${Math.random()}`} value={c.id} className="bg-black">{c.name}</option>)}
                   </select>
                   <div className="flex items-center gap-4">
                      <Volume1 className="w-3.5 h-3.5 text-muted-foreground" />
