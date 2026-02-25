@@ -1,30 +1,29 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 3%;
+    --background: 0 0% 10%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 7%;
+    --card: 0 0% 20%;
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 5%;
+    --popover: 0 0% 9%;
     --popover-foreground: 0 0% 98%;
     --primary: 48 100% 50%;
     --primary-foreground: 0 0% 0%;
-    --secondary: 0 0% 12%;
+    --secondary: 0 0% 15%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 12%;
+    --muted: 0 0% 15%;
     --muted-foreground: 0 0% 63.9%;
     --accent: 48 100% 50%;
     --accent-foreground: 0 0% 0%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     --border: 48 100% 50% / 0.15;
-    --input: 0 0% 12%;
+    --input: 0 0% 14.9%;
     --ring: 48 100% 50%;
-    --radius: 2rem;
+    --radius: 1.5rem;
   }
 }
 
@@ -40,29 +39,14 @@
 
 .studio-grid-bg {
   background-image: 
-    linear-gradient(to right, hsl(var(--primary) / 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, hsl(var(--primary) / 0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-}
-
-.scanline-effect {
-  background: linear-gradient(
-    to bottom,
-    rgba(18, 16, 16, 0) 50%,
-    rgba(0, 0, 0, 0.25) 50%
-  ),
-  linear-gradient(
-    90deg,
-    rgba(255, 0, 0, 0.06),
-    rgba(0, 255, 0, 0.02),
-    rgba(0, 0, 255, 0.06)
-  );
-  background-size: 100% 4px, 3px 100%;
+    linear-gradient(to right, hsl(var(--primary) / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--primary) / 0.05) 1px, transparent 1px);
+  background-size: 60px 60px;
 }
 
 @keyframes bounce-subtle {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  50% { transform: translateY(-4px); }
 }
 
 .animate-bounce-subtle {
@@ -70,32 +54,28 @@
 }
 
 .glass-panel {
-  @apply bg-card/80 backdrop-blur-2xl border border-primary/20 shadow-[0_0_50px_rgba(0,0,0,0.5)];
+  @apply bg-card/90 backdrop-blur-xl border border-primary/20 shadow-2xl;
 }
 
 .gold-border {
-  @apply border border-primary/20 hover:border-primary/50 transition-colors;
+  @apply border border-primary/30;
 }
 
 .gold-shadow {
-  @apply shadow-[0_0_30px_rgba(250,204,21,0.05)];
+  @apply shadow-[0_0_20px_rgba(250,204,21,0.1)];
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-black/40;
+  @apply bg-black/20;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-primary/20 rounded-full hover:bg-primary/50 transition-colors;
-}
-
-.custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  @apply bg-primary/20 rounded-full hover:bg-primary/40 transition-colors;
 }
 
 div[role="dialog"] {
