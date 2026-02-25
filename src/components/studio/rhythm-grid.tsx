@@ -74,6 +74,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const masterAnalyserRef = useRef<AnalyserNode | null>(null);
   const audioBuffersRef = useRef<Record<string, AudioBuffer>>({});
   const reversedBuffersRef = useRef<Record<string, AudioBuffer>>({});
+  const importFileRef = useRef<HTMLInputElement>(null);
   
   const nextNoteTimeRef = useRef<number>(0);
   const currentStepRef = useRef<number>(0);
@@ -222,7 +223,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     if (clips.length === 0) return toast({ title: "No Samples", variant: "destructive" });
     const newGrid: Record<string, string[]> = {};
     for (let c = 0; c < numChannels; c++) {
-      const clipId = selectedClipsForChannel[c.toString()] || clips[Math.floor(Math.random() * clips.length)].id;
+      const clipId = selectedClipsForChannel[c.toString()] || (clips.length > 0 ? clips[Math.floor(Math.random() * clips.length)].id : '');
+      if (!clipId) continue;
       for (let s = 0; s < numSteps; s++) { if (Math.random() > 0.8) newGrid[`${c}-${s}`] = [clipId]; }
     }
     setGrid(newGrid);
@@ -259,6 +261,68 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     toast({ title: "Session Synchronized" });
   };
 
+  const handleExportProject = () => {
+    const projectData = {
+      track: {
+        title,
+        bpm,
+        numChannels,
+        numSteps,
+        grid,
+        channelSettings,
+        selectedClips: selectedClipsForChannel
+      },
+      // Export actual clips used in the track so it's fully portable
+      clips: clips.filter(c => Object.values(selectedClipsForChannel).includes(c.id) || Object.values(grid).flat().includes(c.id))
+    };
+    
+    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.replace(/\s+/g, '_')}_config.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Project Config Exported" });
+  };
+
+  const handleImportProject = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (!data.track || !data.clips) throw new Error("Invalid Project File");
+
+        // Save imported clips to DB
+        data.clips.forEach((clip: AudioClip) => {
+          // If the clip already exists for this user, we could skip it, but saveClip handles simple push
+          // Better logic would be to check IDs
+          const existingClips = db.getClips(user.id);
+          if (!existingClips.find(ec => ec.id === clip.id)) {
+            db.saveClip(clip);
+          }
+        });
+
+        // Update local state
+        setTitle(data.track.title);
+        setBpm(data.track.bpm);
+        setNumChannels(data.track.numChannels);
+        setNumSteps(data.track.numSteps);
+        setGrid(data.track.grid);
+        setChannelSettings(data.track.channelSettings);
+        setSelectedClipsForChannel(data.track.selectedClips);
+
+        toast({ title: "Project Config Imported", description: "All assets synchronized." });
+      } catch (err) {
+        toast({ title: "Import Failed", description: "The file is corrupted or invalid.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleExportAudio = async () => {
     if (isExporting) return;
     setIsExporting(true);
@@ -287,6 +351,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   return (
     <div className="space-y-12">
+      <input type="file" accept=".json" ref={importFileRef} className="hidden" onChange={handleImportProject} />
       <div className="glass-panel p-10 rounded-[3rem] gold-shadow relative overflow-hidden">
         <div className="absolute inset-0 studio-grid-bg opacity-10" />
         <div className="flex flex-col lg:flex-row items-center justify-between gap-12 relative z-10">
@@ -318,10 +383,16 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               {isPlaying ? <Square className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
             </Button>
             <div className="flex flex-col gap-3">
-              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleSave}><Save className="w-5 h-5" /></Button>
-              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-primary/20 text-primary" onClick={handleExportAudio} disabled={isExporting}>
-                {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-              </Button>
+              <div className="flex gap-2">
+                <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={() => importFileRef.current?.click()} title="Import Project Config"><FileUp className="w-5 h-5" /></Button>
+                <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleExportProject} title="Export Project Config"><FileDown className="w-5 h-5" /></Button>
+              </div>
+              <div className="flex gap-2">
+                <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleSave} title="Save to Browser"><Save className="w-5 h-5" /></Button>
+                <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-primary/20 text-primary" onClick={handleExportAudio} disabled={isExporting} title="Download Master WAV">
+                  {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -359,6 +430,14 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                       onUpdate={(key, val) => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], [key]: val } }))} 
                       onAudition={() => { if (selId) playClip(selId, chKey); }} 
                     />
+                    <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-red-500/40 hover:text-red-500 hover:bg-red-500/10" onClick={() => {
+                      setNumChannels(p => Math.max(1, p - 1));
+                      const newGrid = { ...grid };
+                      Object.keys(newGrid).forEach(k => { if (k.startsWith(`${chIdx}-`)) delete newGrid[k]; });
+                      setGrid(newGrid);
+                    }}>
+                      <Trash2 className="w-5 h-5" />
+                    </Button>
                   </div>
                 </div>
               </div>
