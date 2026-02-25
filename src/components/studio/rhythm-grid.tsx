@@ -348,11 +348,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   // --- PATTERN WORKBENCH TOOLS ---
 
   const randomizePattern = () => {
+    setGrid({});
     if (clips.length === 0) {
       toast({ title: "No Samples", description: "Import sounds to randomize rhythm." });
       return;
     }
-    const newGrid = { ...grid };
+    const newGrid: Record<string, string[]> = {};
     for (let c = 0; c < numChannels; c++) {
       const clipId = selectedClipsForChannel[c.toString()] || clips[Math.floor(Math.random() * clips.length)].id;
       for (let s = 0; s < numSteps; s++) {
