@@ -56,7 +56,7 @@ const VisualEnvelope = ({ attack, release }: { attack: number, release: number }
   const r = (release / 2) * 100;
   
   return (
-    <div className="h-32 w-full bg-black/60 rounded-[2rem] border border-primary/10 overflow-hidden relative shadow-inner">
+    <div className="h-32 w-full bg-black/60 rounded-[0] border border-primary/10 overflow-hidden relative shadow-inner">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
         <defs>
           <linearGradient id="env-grad" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -81,7 +81,7 @@ const VisualEnvelope = ({ attack, release }: { attack: number, release: number }
 
 const VisualTrim = ({ start, end }: { start: number, end: number }) => {
   return (
-    <div className="h-24 w-full bg-black/60 rounded-[2rem] border border-primary/10 overflow-hidden relative shadow-inner group">
+    <div className="h-24 w-full bg-black/60 rounded-[0] border border-primary/10 overflow-hidden relative shadow-inner group">
       <div className="absolute inset-0 opacity-20 flex items-center justify-around pointer-events-none">
         {Array.from({ length: 20 }).map((_, i) => (
           <div key={i} className="w-0.5 bg-primary" style={{ height: `${20 + Math.random() * 60}%` }} />
@@ -146,7 +146,7 @@ const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }) => {
   }, [analyser]);
 
   return (
-    <div className="h-24 w-full bg-black/40 rounded-[2rem] overflow-hidden border border-primary/10 relative shadow-inner">
+    <div className="h-24 w-full bg-black/40 rounded-[1rem] overflow-hidden border border-primary/10 relative shadow-inner">
       <canvas ref={canvasRef} width={800} height={100} className="w-full h-full" />
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
         <Activity className="w-4 h-4 text-primary" />
@@ -406,8 +406,8 @@ export function RhythmGrid({ user, clips, track }: {
             />
             
             <div className="flex flex-col md:flex-row items-center gap-8">
-               <div className="flex items-center gap-4 bg-black/60 rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full ai-glow-input">
-                  <BrainCircuit className="w-6 h-6 text-primary animate-pulse" />
+               <div className="flex items-center gap-4 h-[60] rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full ai-glow-input">
+                  {/* <BrainCircuit className="w-6 h-6 text-primary animate-pulse" />
                   <input 
                     placeholder="DESCRIBE_THE_VIBE..."
                     value={aiPrompt}
@@ -421,7 +421,7 @@ export function RhythmGrid({ user, clips, track }: {
                     className="h-10 px-6 rounded-full text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-black border border-primary/20"
                   >
                     {isAiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "SYNTHESIZE"}
-                  </Button>
+                  </Button> */}
                </div>
                <div className="w-full md:w-64">
                   <MasterVisualizer analyser={masterAnalyserRef.current} />
@@ -502,7 +502,7 @@ export function RhythmGrid({ user, clips, track }: {
                      {s.muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                    </Button>
                    
-                   <Dialog>
+                   <Dialog  key={'dialog'} >
                     <DialogTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-primary/40 hover:text-primary"><Sliders className="w-5 h-5" /></Button>
                     </DialogTrigger>
@@ -516,9 +516,9 @@ export function RhythmGrid({ user, clips, track }: {
                           </DialogTitle>
                        </DialogHeader>
                        
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-10 py-10 max-h-[70vh] overflow-y-auto pr-4 custom-scrollbar">
+                       <div className="grid z-[9999] grid-cols-1 md:grid-cols-2 gap-10 py-10 max-h-[60vh] overflow-y-scroll pr-4 ">
                           {/* Modifiers Section */}
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative h-auto group">
                              <div className="absolute top-0 right-0 p-4">
                                 <Waves className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
                              </div>
@@ -558,7 +558,7 @@ export function RhythmGrid({ user, clips, track }: {
                           </div>
 
                           {/* Envelope Section */}
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative h-hidden group">
                              <div className="absolute top-0 right-0 p-4">
                                 <Timer className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
                              </div>
@@ -585,7 +585,7 @@ export function RhythmGrid({ user, clips, track }: {
                           </div>
 
                           {/* Sound Shaping Section */}
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative h-hidden group">
                              <div className="absolute top-0 right-0 p-4">
                                 <Sparkles className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
                              </div>
@@ -616,7 +616,7 @@ export function RhythmGrid({ user, clips, track }: {
                           </div>
 
                           {/* Spatial Section */}
-                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative overflow-hidden group">
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative h-hidden group">
                              <div className="absolute top-0 right-0 p-4">
                                 <ArrowRightLeft className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
                              </div>
