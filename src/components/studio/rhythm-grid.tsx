@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -6,7 +7,7 @@ import {
   Play, Square, Music, Save, Download, Plus, Trash2, 
   Loader2, Zap, Waves, Sparkles, Mic2, VolumeX, Volume2, 
   RotateCcw, Scissors, Timer, Settings, Volume1, Maximize2, 
-  Gauge, BrainCircuit, Wand2, Activity
+  Gauge, BrainCircuit, Wand2, Activity, Sliders, Repeat
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
@@ -47,7 +48,6 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   trimEnd: 1,
 };
 
-// Canvas Visualizer Component
 const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(null);
@@ -104,7 +104,6 @@ export function RhythmGrid({ user, clips, track }: {
   const [numSteps, setNumSteps] = useState(track?.numSteps || 16);
   const [numChannels, setNumChannels] = useState(track?.numChannels || DEFAULT_CHANNELS);
   const [grid, setGrid] = useState<Record<string, string[]>>(track?.grid || {});
-  const [isExporting, setIsExporting] = useState(false);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [title, setTitle] = useState(track?.title || 'SONIC_MANIFEST_01');
@@ -127,30 +126,24 @@ export function RhythmGrid({ user, clips, track }: {
   const initAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
-      
       const compressor = ctx.createDynamicsCompressor();
       compressor.threshold.setValueAtTime(-12, ctx.currentTime);
-      compressor.ratio.setValueAtTime(4, ctx.currentTime);
-      
       const masterGain = ctx.createGain();
-      masterGain.gain.value = 1.2;
-
+      masterGain.gain.value = 1.0;
       compressor.connect(masterGain);
       masterGain.connect(analyser);
       analyser.connect(ctx.destination);
-      
       masterAnalyserRef.current = analyser;
       audioContextRef.current = ctx;
     }
     return audioContextRef.current;
   }, []);
 
-  const loadAudio = useCallback(async (clip: AudioClip, targetContext?: BaseAudioContext) => {
+  const loadAudio = useCallback(async (clip: AudioClip) => {
     if (audioBuffersRef.current[clip.id]) return audioBuffersRef.current[clip.id];
-    const ctx = targetContext || initAudioContext();
+    const ctx = initAudioContext();
     try {
       const res = await fetch(clip.audioData);
       const arrayBuffer = await res.arrayBuffer();
@@ -163,9 +156,9 @@ export function RhythmGrid({ user, clips, track }: {
     }
   }, [initAudioContext]);
 
-  const playClip = useCallback(async (clipId: string, channelIdx: string, manualTime?: number) => {
+  const playClip = useCallback(async (clipId: string, channelIdx: string, scheduledTime?: number) => {
     const settings = channelSettings[channelIdx] || DEFAULT_CHANNEL_SETTINGS;
-    if (settings.muted && !manualTime) return;
+    if (settings.muted && !scheduledTime) return;
 
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
@@ -194,16 +187,26 @@ export function RhythmGrid({ user, clips, track }: {
       const panNode = ctx.createStereoPanner();
       const filterNode = ctx.createBiquadFilter();
       
+      const semitoneFactor = Math.pow(2, 1/12);
+      let playbackRate = settings.pitch;
+      if (settings.autoTune > 0) {
+        const currentSteps = Math.log(playbackRate) / Math.log(semitoneFactor);
+        const snappedSteps = Math.round(currentSteps);
+        playbackRate = (playbackRate * (1 - settings.autoTune)) + (Math.pow(semitoneFactor, snappedSteps) * settings.autoTune);
+      }
+
       source.buffer = buffer;
-      source.playbackRate.value = settings.pitch;
+      source.playbackRate.value = playbackRate;
       panNode.pan.value = settings.pan;
       filterNode.frequency.value = 200 + (Math.pow(settings.cutoff, 2) * 19800);
 
-      const startTime = manualTime || ctx.currentTime;
+      const startTime = scheduledTime || ctx.currentTime;
+      const duration = (buffer.duration * (settings.trimEnd - settings.trimStart)) / playbackRate;
+      const trimStartOffset = settings.trimStart * buffer.duration;
+
       gainNode.gain.setValueAtTime(0, startTime);
       gainNode.gain.linearRampToValueAtTime(settings.volume, startTime + settings.attack);
-      
-      const duration = buffer.duration / settings.pitch;
+      gainNode.gain.setValueAtTime(settings.volume, Math.max(startTime + duration - settings.release, startTime + settings.attack));
       gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
 
       source.connect(filterNode);
@@ -211,11 +214,32 @@ export function RhythmGrid({ user, clips, track }: {
       gainNode.connect(panNode);
       panNode.connect(masterAnalyserRef.current?.parentElement || ctx.destination);
 
-      source.start(startTime);
+      source.start(startTime, trimStartOffset, duration);
     } catch (e) {
       console.error(e);
     }
   }, [clips, loadAudio, initAudioContext, channelSettings]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      const stepInterval = (60 / bpm) / 4 * 1000;
+      timerRef.current = setInterval(() => {
+        setCurrentStep(prev => {
+          const next = (prev + 1) % numSteps;
+          for (let c = 0; c < numChannels; c++) {
+            const clipIds = grid[`${c}-${next}`];
+            if (clipIds) clipIds.forEach(id => playClip(id, c.toString()));
+          }
+          return next;
+        });
+      }, stepInterval);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isPlaying, bpm, grid, playClip, numChannels, numSteps]);
+
+  const updateChannelSetting = (idx: string, key: keyof ChannelSettings, val: any) => {
+    setChannelSettings(p => ({ ...p, [idx]: { ...p[idx], [key]: val } }));
+  };
 
   const handleAiCompose = async () => {
     if (!aiPrompt || clips.length === 0) {
@@ -236,25 +260,21 @@ export function RhythmGrid({ user, clips, track }: {
     }
   };
 
-  useEffect(() => {
-    if (isPlaying) {
-      const stepInterval = (60 / bpm) / 4 * 1000;
-      timerRef.current = setInterval(() => {
-        setCurrentStep(prev => {
-          const next = (prev + 1) % numSteps;
-          for (let c = 0; c < numChannels; c++) {
-            const clipIds = grid[`${c}-${next}`];
-            if (clipIds) clipIds.forEach(id => playClip(id, c.toString()));
-          }
-          return next;
-        });
-      }, stepInterval);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isPlaying, bpm, grid, playClip, numChannels, numSteps]);
-
-  const updateChannelSetting = (idx: number, key: keyof ChannelSettings, val: any) => {
-    setChannelSettings(p => ({ ...p, [idx.toString()]: { ...p[idx.toString()], [key]: val } }));
+  const handleSave = () => {
+    const newTrack: Track = {
+      id: track?.id || crypto.randomUUID(),
+      userId: user.id,
+      title,
+      bpm,
+      numChannels,
+      numSteps,
+      grid,
+      channelSettings,
+      selectedClips: selectedClipsForChannel,
+      createdAt: Date.now()
+    };
+    db.saveTrack(newTrack);
+    toast({ title: "Session Synchronized", description: `${title} has been archived.` });
   };
 
   return (
@@ -287,7 +307,7 @@ export function RhythmGrid({ user, clips, track }: {
                     disabled={isAiLoading}
                     className="h-10 px-6 rounded-full text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-black border border-primary/20"
                   >
-                    {isAiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "SYNTESIZE"}
+                    {isAiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "SYNTHESIZE"}
                   </Button>
                </div>
                <div className="w-full md:w-64">
@@ -315,13 +335,10 @@ export function RhythmGrid({ user, clips, track }: {
             </Button>
 
             <div className="flex flex-col gap-3">
-               <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary hover:bg-primary/10" onClick={() => {
-                 db.saveTrack({ id: track?.id || crypto.randomUUID(), userId: user.id, title, bpm, numChannels, numSteps, grid, channelSettings, selectedClips: selectedClipsForChannel, createdAt: Date.now() });
-                 toast({ title: "Session Synchronized" });
-               }}>
+               <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary hover:bg-primary/10" onClick={handleSave}>
                  <Save className="w-5 h-5" />
                </Button>
-               <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary hover:bg-primary/10" onClick={() => toast({ title: "Exporting High-Fidelity Signal..." })}>
+               <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary hover:bg-primary/10" onClick={() => toast({ title: "Mastering Signal...", description: "Exporting high-fidelity WAV." })}>
                  <Download className="w-5 h-5" />
                </Button>
             </div>
@@ -332,20 +349,21 @@ export function RhythmGrid({ user, clips, track }: {
       {/* Kinetic Sequencer Engine */}
       <div className="glass-panel rounded-[3rem] p-12 gold-shadow overflow-x-auto space-y-8 bg-black/40">
         {Array.from({ length: numChannels }).map((_, chIdx) => {
-          const s = channelSettings[chIdx.toString()] || DEFAULT_CHANNEL_SETTINGS;
-          const selId = selectedClipsForChannel[chIdx.toString()] || '';
+          const chKey = chIdx.toString();
+          const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
+          const selId = selectedClipsForChannel[chKey] || '';
           const isActive = grid[`${chIdx}-${currentStep}`];
 
           return (
             <div key={chIdx} className={cn("flex items-center gap-8 transition-all duration-500", isActive ? "translate-x-2" : "")}>
               <div className={cn(
-                "w-[420px] shrink-0 bg-neutral-900/60 p-6 rounded-[2.5rem] flex items-center gap-6 border border-white/5 transition-all duration-300",
+                "w-[460px] shrink-0 bg-neutral-900/60 p-6 rounded-[2.5rem] flex items-center gap-6 border border-white/5 transition-all duration-300",
                 isActive ? "border-primary/40 bg-primary/5 shadow-lg" : ""
               )}>
                 <button
-                  onClick={() => { if (selId) playClip(selId, chIdx.toString()); }}
+                  onClick={() => { if (selId) playClip(selId, chKey); }}
                   className={cn(
-                    "w-16 h-16 rounded-[1.5rem] flex items-center justify-center transition-all active:scale-90 shadow-2xl",
+                    "w-16 h-16 rounded-[1.5rem] flex items-center justify-center transition-all active:scale-90 shadow-2xl shrink-0",
                     s.muted ? "bg-neutral-800" : s.color,
                     isActive ? "scale-110 brightness-125" : ""
                   )}
@@ -353,59 +371,149 @@ export function RhythmGrid({ user, clips, track }: {
                   <Music className={cn("w-8 h-8", s.muted ? "text-muted-foreground" : "text-black")} />
                 </button>
 
-                <div className="flex-1 space-y-4">
+                <div className="flex-1 space-y-4 min-w-0">
                   <select
-                    className="w-full bg-transparent text-[11px] font-black uppercase tracking-[0.2em] text-primary outline-none cursor-pointer"
+                    className="w-full bg-transparent text-[11px] font-black uppercase tracking-[0.2em] text-primary outline-none cursor-pointer truncate"
                     value={selId}
-                    onChange={(e) => setSelectedClipsForChannel(p => ({ ...p, [chIdx.toString()]: e.target.value }))}
+                    onChange={(e) => setSelectedClipsForChannel(p => ({ ...p, [chKey]: e.target.value }))}
                   >
                     <option value="" className="bg-black">SELECT_SIGNAL</option>
                     {clips.map(c => <option key={c.id} value={c.id} className="bg-black">{c.name}</option>)}
                   </select>
                   <div className="flex items-center gap-4">
                      <Volume1 className="w-3.5 h-3.5 text-muted-foreground" />
-                     <Slider value={[s.volume * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chIdx, 'volume', v[0] / 100)} className="h-1.5 flex-1" />
+                     <Slider value={[s.volume * 100]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chKey, 'volume', v[0] / 100)} className="h-1.5 flex-1" />
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2">
-                   <Button variant="ghost" size="icon" className={cn("h-10 w-10 rounded-xl", s.muted ? "text-red-500 bg-red-500/10" : "text-muted-foreground")} onClick={() => updateChannelSetting(chIdx, 'muted', !s.muted)}>
+                <div className="flex flex-col gap-2 shrink-0">
+                   <Button variant="ghost" size="icon" className={cn("h-10 w-10 rounded-xl", s.muted ? "text-red-500 bg-red-500/10" : "text-muted-foreground")} onClick={() => updateChannelSetting(chKey, 'muted', !s.muted)}>
                      {s.muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                    </Button>
+                   
                    <Dialog>
                     <DialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-primary/40 hover:text-primary"><Maximize2 className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-primary/40 hover:text-primary"><Sliders className="w-5 h-5" /></Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-4xl glass-panel border-primary/20 rounded-[3rem] p-12">
-                       <DialogHeader><DialogTitle className="text-4xl font-black italic text-primary">SAMPLER_LAB</DialogTitle></DialogHeader>
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-10 py-10">
+                    <DialogContent className="max-w-4xl glass-panel border-primary/20 rounded-[3rem] p-12 gold-shadow">
+                       <DialogHeader>
+                          <DialogTitle className="text-4xl font-black italic text-primary tracking-tighter uppercase flex items-center gap-4">
+                            <Maximize2 className="w-8 h-8" /> Sampler_Lab
+                          </DialogTitle>
+                       </DialogHeader>
+                       
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-10 py-10 max-h-[70vh] overflow-y-auto pr-4 custom-scrollbar">
+                          {/* Modifiers Section */}
                           <div className="space-y-8 bg-black/40 p-8 rounded-[2rem] border border-white/5">
-                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">ENVELOPE</h4>
+                             <div className="flex justify-between items-center">
+                               <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Signal_Modifiers</h4>
+                               <div className="flex items-center gap-3">
+                                  <Label className="text-[9px] font-black uppercase">Reverse</Label>
+                                  <Switch checked={s.reversed} onCheckedChange={(v) => updateChannelSetting(chKey, 'reversed', v)} />
+                               </div>
+                             </div>
                              <div className="space-y-6">
-                                <div className="space-y-2">
-                                   <label className="text-[9px] font-black text-muted-foreground uppercase">Attack</label>
-                                   <Slider value={[s.attack * 100]} onValueChange={(v) => updateChannelSetting(chIdx, 'attack', v[0] / 100)} />
+                                <div className="space-y-3">
+                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                      <span>Trim_Start</span>
+                                      <span className="text-primary">{Math.round(s.trimStart * 100)}%</span>
+                                   </div>
+                                   <Slider value={[s.trimStart * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'trimStart', v[0] / 100)} />
                                 </div>
-                                <div className="space-y-2">
-                                   <label className="text-[9px] font-black text-muted-foreground uppercase">Release</label>
-                                   <Slider value={[s.release * 100]} onValueChange={(v) => updateChannelSetting(chIdx, 'release', v[0] / 100)} />
+                                <div className="space-y-3">
+                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                      <span>Trim_End</span>
+                                      <span className="text-primary">{Math.round(s.trimEnd * 100)}%</span>
+                                   </div>
+                                   <Slider value={[s.trimEnd * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'trimEnd', v[0] / 100)} />
+                                </div>
+                                <div className="space-y-3">
+                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                      <span>Auto_Tune</span>
+                                      <span className="text-primary">{Math.round(s.autoTune * 100)}%</span>
+                                   </div>
+                                   <Slider value={[s.autoTune * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'autoTune', v[0] / 100)} />
                                 </div>
                              </div>
                           </div>
+
+                          {/* Envelope Section */}
                           <div className="space-y-8 bg-black/40 p-8 rounded-[2rem] border border-white/5">
-                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">EFFECTS</h4>
+                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Envelope_ADSR</h4>
                              <div className="space-y-6">
-                                <div className="space-y-2">
-                                   <label className="text-[9px] font-black text-muted-foreground uppercase">Drive</label>
-                                   <Slider value={[s.distortion * 100]} onValueChange={(v) => updateChannelSetting(chIdx, 'distortion', v[0] / 100)} />
+                                <div className="space-y-3">
+                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                      <span>Attack</span>
+                                      <span className="text-primary">{s.attack.toFixed(2)}s</span>
+                                   </div>
+                                   <Slider value={[s.attack * 100]} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'attack', v[0] / 100)} />
                                 </div>
-                                <div className="space-y-2">
-                                   <label className="text-[9px] font-black text-muted-foreground uppercase">Cutoff</label>
-                                   <Slider value={[s.cutoff * 100]} onValueChange={(v) => updateChannelSetting(chIdx, 'cutoff', v[0] / 100)} />
+                                <div className="space-y-3">
+                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                      <span>Release</span>
+                                      <span className="text-primary">{s.release.toFixed(2)}s</span>
+                                   </div>
+                                   <Slider value={[s.release * 100]} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'release', v[0] / 100)} />
+                                </div>
+                             </div>
+                          </div>
+
+                          {/* Sound Shaping Section */}
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[2rem] border border-white/5">
+                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Harmonics_Shape</h4>
+                             <div className="space-y-6">
+                                <div className="space-y-3">
+                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                      <span>Pitch_Shift</span>
+                                      <span className="text-primary">{s.pitch.toFixed(2)}x</span>
+                                   </div>
+                                   <Slider value={[s.pitch * 50]} min={25} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'pitch', v[0] / 50)} />
+                                </div>
+                                <div className="space-y-3">
+                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                      <span>Filter_Cutoff</span>
+                                      <span className="text-primary">{Math.round(s.cutoff * 100)}%</span>
+                                   </div>
+                                   <Slider value={[s.cutoff * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'cutoff', v[0] / 100)} />
+                                </div>
+                                <div className="space-y-3">
+                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                      <span>Drive_Saturation</span>
+                                      <span className="text-primary">{Math.round(s.distortion * 100)}%</span>
+                                   </div>
+                                   <Slider value={[s.distortion * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'distortion', v[0] / 100)} />
+                                </div>
+                             </div>
+                          </div>
+
+                          {/* Spatial Section */}
+                          <div className="space-y-8 bg-black/40 p-8 rounded-[2rem] border border-white/5">
+                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Spatial_Field</h4>
+                             <div className="space-y-6">
+                                <div className="space-y-3">
+                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                      <span>Stereo_Pan</span>
+                                      <span className="text-primary">{s.pan.toFixed(2)}</span>
+                                   </div>
+                                   <Slider value={[s.pan * 50 + 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chKey, 'pan', (v[0] - 50) / 50)} />
+                                </div>
+                                <div className="pt-6">
+                                   <Button 
+                                      className="w-full h-16 rounded-[1.5rem] bg-primary text-black font-black uppercase tracking-widest hover:bg-primary/90 shadow-2xl"
+                                      onClick={() => { if (selId) playClip(selId, chKey); }}
+                                   >
+                                      <Play className="w-5 h-5 mr-3 fill-current" /> Audition_Signal
+                                   </Button>
                                 </div>
                              </div>
                           </div>
                        </div>
+                       
+                       <DialogFooter className="pt-8 border-t border-white/5">
+                          <Button className="w-full h-14 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.4em] hover:bg-primary hover:text-black transition-all">
+                             Sync_Channel_State
+                          </Button>
+                       </DialogFooter>
                     </DialogContent>
                    </Dialog>
                 </div>
@@ -423,7 +531,7 @@ export function RhythmGrid({ user, clips, track }: {
                     <button
                       key={stepIdx}
                       onClick={() => {
-                        const cid = selectedClipsForChannel[chIdx.toString()];
+                        const cid = selectedClipsForChannel[chKey];
                         if (!cid) return;
                         const key = `${chIdx}-${stepIdx}`;
                         const ng = { ...grid };
@@ -432,7 +540,7 @@ export function RhythmGrid({ user, clips, track }: {
                           if (ng[key].length === 0) delete ng[key];
                         } else {
                           ng[key] = [cid];
-                          playClip(cid, chIdx.toString());
+                          playClip(cid, chKey);
                         }
                         setGrid(ng);
                       }}
@@ -471,3 +579,4 @@ export function RhythmGrid({ user, clips, track }: {
     </div>
   );
 }
+
