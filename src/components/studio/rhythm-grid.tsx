@@ -799,7 +799,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                      
                      <Dialog>
                       <DialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-primary/40 hover:text-primary"><Sliders className="w-5 h-5" /></Button>
+                        <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-primary/40 hover:text-black"><Sliders className="w-5 h-5" /></Button>
                       </DialogTrigger>
                       <DialogContent className="max-w-4xl glass-panel border-primary/20 rounded-[3rem] p-12 gold-shadow">
                          <DialogHeader>
