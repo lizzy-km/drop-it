@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -45,11 +46,12 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   trimEnd: 1,
 };
 
-export function RhythmGrid({ user, clips, track, onSaveTrack }: {
+export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }: {
   user: User;
   clips: AudioClip[];
   track?: Track;
   onSaveTrack: (t: Track) => void;
+  onImportRefresh?: () => void;
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -272,7 +274,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         channelSettings,
         selectedClips: selectedClipsForChannel
       },
-      // Export actual clips used in the track so it's fully portable
       clips: clips.filter(c => Object.values(selectedClipsForChannel).includes(c.id) || Object.values(grid).flat().includes(c.id))
     };
     
@@ -296,17 +297,13 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         const data = JSON.parse(event.target?.result as string);
         if (!data.track || !data.clips) throw new Error("Invalid Project File");
 
-        // Save imported clips to DB
         data.clips.forEach((clip: AudioClip) => {
-          // If the clip already exists for this user, we could skip it, but saveClip handles simple push
-          // Better logic would be to check IDs
           const existingClips = db.getClips(user.id);
           if (!existingClips.find(ec => ec.id === clip.id)) {
             db.saveClip(clip);
           }
         });
 
-        // Update local state
         setTitle(data.track.title);
         setBpm(data.track.bpm);
         setNumChannels(data.track.numChannels);
@@ -315,12 +312,15 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         setChannelSettings(data.track.channelSettings);
         setSelectedClipsForChannel(data.track.selectedClips);
 
+        if (onImportRefresh) onImportRefresh();
+
         toast({ title: "Project Config Imported", description: "All assets synchronized." });
       } catch (err) {
         toast({ title: "Import Failed", description: "The file is corrupted or invalid.", variant: "destructive" });
       }
     };
     reader.readAsText(file);
+    e.target.value = ''; 
   };
 
   const handleExportAudio = async () => {

@@ -40,7 +40,8 @@ function StudioContent() {
   }, [router, trackId]);
 
   const refreshClips = () => {
-    if (user) setClips(db.getClips(user.id));
+    const currentUser = db.getCurrentUser();
+    if (currentUser) setClips(db.getClips(currentUser.id));
   };
 
   const deleteClip = (id: string) => {
@@ -95,7 +96,14 @@ function StudioContent() {
 
       <main className="max-w-[1600px] mx-auto px-10 py-12 space-y-16">
         <section className="animate-in fade-in zoom-in-95 duration-700">
-          <RhythmGrid key={loadedTrack?.id} user={user} clips={clips} track={loadedTrack} onSaveTrack={() => {}} />
+          <RhythmGrid 
+            key={loadedTrack?.id} 
+            user={user} 
+            clips={clips} 
+            track={loadedTrack} 
+            onSaveTrack={() => {}} 
+            onImportRefresh={refreshClips}
+          />
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
