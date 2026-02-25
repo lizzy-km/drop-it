@@ -57,7 +57,6 @@ const VisualEnvelope = ({ attack, release }: { attack: number, release: number }
   
   return (
     <div className="h-32 w-full bg-black/60 rounded-[0] border border-primary/10 overflow-hidden relative shadow-inner">
-    <div className="h-32 w-full bg-black/60 rounded-[0] border border-primary/10 overflow-hidden relative shadow-inner">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
         <defs>
           <linearGradient id="env-grad" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -484,7 +483,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                     className="h-10 px-6 rounded-full text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-black border border-primary/20"
                   >
                     {isAiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "SYNTHESIZE"}
-                  </Button> */}
+                  </Button>
                </div>
                <div className="w-full md:w-64">
                   <MasterVisualizer analyser={masterAnalyserRef.current} />
@@ -571,7 +570,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                      {s.muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                    </Button>
                    
-                   <Dialog  key={'dialog'} >
+                   <Dialog>
                     <DialogTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-primary/40 hover:text-primary"><Sliders className="w-5 h-5" /></Button>
                     </DialogTrigger>
