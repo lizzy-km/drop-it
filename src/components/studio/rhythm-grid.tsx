@@ -25,7 +25,9 @@ import {
   Volume1,
   Maximize2,
   ChevronRight,
-  Gauge
+  Gauge,
+  BrainCircuit,
+  Wand2
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
@@ -35,6 +37,7 @@ import { Slider } from '@/components/ui/slider';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { generateBeat } from '@/ai/flows/generate-beat-flow';
 
 const DEFAULT_CHANNELS = 4;
 const MAX_STEPS = 64;
@@ -143,6 +146,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const [numChannels, setNumChannels] = useState(track?.numChannels || DEFAULT_CHANNELS);
   const [grid, setGrid] = useState<Record<string, string[]>>(track?.grid || {});
   const [isExporting, setIsExporting] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
   const [channelSettings, setChannelSettings] = useState<Record<string, ChannelSettings>>(
     track?.channelSettings ||
     Object.fromEntries(Array.from({ length: DEFAULT_CHANNELS }).map((_, i) => [i.toString(), { ...DEFAULT_CHANNEL_SETTINGS, color: CHANNEL_COLORS[i % CHANNEL_COLORS.length].class }]))
@@ -261,7 +266,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       gainNode.gain.setValueAtTime(0, startTime);
       gainNode.gain.linearRampToValueAtTime(settings.volume, startTime + settings.attack);
       
-      const duration = buffer.duration / finalPitch;
       const trimStart = settings.trimStart * buffer.duration;
       const trimEnd = settings.trimEnd * buffer.duration;
       const playDuration = Math.max(0, trimEnd - trimStart) / finalPitch;
@@ -281,6 +285,48 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       console.error("Playback Error:", error);
     }
   }, [clips, loadAudio, initAudioContext, channelSettings]);
+
+  const handleAiCompose = async () => {
+    if (!aiPrompt || clips.length === 0) {
+      toast({ title: "Samples required", description: "Record or import some sounds first!", variant: "destructive" });
+      return;
+    }
+    
+    setIsAiLoading(true);
+    try {
+      const res = await generateBeat({
+        prompt: aiPrompt,
+        availableClips: clips.map(c => ({ id: c.id, name: c.name })),
+        numChannels,
+        numSteps
+      });
+      
+      setGrid(res.grid);
+      setBpm(res.bpm);
+      setTitle(res.title);
+      
+      // Auto-assign clips to channels based on what the AI used
+      const newSelections = { ...selectedClipsForChannel };
+      Object.entries(res.grid).forEach(([key, ids]) => {
+        const ch = key.split('-')[0];
+        if (!newSelections[ch] && ids[0]) {
+          newSelections[ch] = ids[0];
+        }
+      });
+      setSelectedClipsForChannel(newSelections);
+
+      toast({ 
+        title: "AI Composition Complete", 
+        description: `Constructed a ${res.bpm} BPM "${res.title}" pattern.`,
+        className: "bg-primary text-black font-bold"
+      });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "AI Error", description: "The Architect hit a frequency wall. Try again!", variant: "destructive" });
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
 
   const exportToAudio = async () => {
     if (isExporting) return;
@@ -306,7 +352,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       compressor.release.setValueAtTime(0.25, offlineCtx.currentTime);
 
       const masterBoost = offlineCtx.createGain();
-      masterBoost.gain.setValueAtTime(1.5, offlineCtx.currentTime); // Professional makeup gain for export
+      masterBoost.gain.setValueAtTime(1.5, offlineCtx.currentTime);
 
       compressor.connect(masterBoost);
       masterBoost.connect(offlineCtx.destination);
@@ -386,12 +432,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${title.toLowerCase().replace(/\s+/g, '_')}_export.wav`;
+      link.download = `${title.toLowerCase().replace(/\s+/g, '_')}_master.wav`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       
-      toast({ title: "Export Complete", description: "Your master .wav is ready with optimized volume!" });
+      toast({ title: "Master Exported", description: "Studio-grade .wav created." });
     } catch (err) {
       console.error(err);
       toast({ title: "Export Failed", variant: "destructive" });
@@ -403,7 +449,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const toggleCell = async (channelIdx: number, step: number) => {
     const clipId = selectedClipsForChannel[channelIdx.toString()];
     if (!clipId) {
-      toast({ title: "Assign a sound to this track first!" });
+      toast({ title: "Select a sample for this track!" });
       return;
     }
     const key = `${channelIdx}-${step}`;
@@ -486,7 +532,14 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   return (
     <div className="space-y-8">
       {/* Studio Header Controls */}
-      <div className="glass-panel p-8 rounded-[2.5rem] gold-shadow flex flex-col xl:flex-row items-center justify-between gap-8 border-primary/30">
+      <div className="glass-panel p-8 rounded-[2.5rem] gold-shadow flex flex-col xl:flex-row items-center justify-between gap-8 border-primary/30 relative overflow-hidden">
+        {isAiLoading && <div className="absolute inset-0 bg-primary/10 backdrop-blur-sm z-50 flex items-center justify-center animate-pulse">
+           <div className="flex flex-col items-center gap-4">
+              <BrainCircuit className="w-16 h-16 text-primary animate-spin" />
+              <span className="font-black text-xs uppercase tracking-[0.5em] text-primary">Architect_Compiling...</span>
+           </div>
+        </div>}
+        
         <div className="flex flex-col md:flex-row items-center gap-10 flex-1 w-full">
           <div className="space-y-1 flex-1">
              <input
@@ -495,7 +548,25 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 className="text-4xl font-black italic tracking-tighter bg-transparent border-none focus:ring-0 w-full outline-none text-primary"
                 placeholder="PROJECT_NAME"
               />
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] px-1">Session Live Studio</p>
+              <div className="flex items-center gap-4 mt-2">
+                 <div className="flex items-center gap-2 bg-black/40 rounded-full px-4 py-2 border border-primary/20 group hover:border-primary/50 transition-all">
+                    <Wand2 className="w-4 h-4 text-primary animate-pulse" />
+                    <input 
+                      placeholder="AI_RHYTHM_PROMPT..."
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAiCompose()}
+                      className="bg-transparent border-none outline-none text-[10px] font-black uppercase tracking-widest text-primary w-48 placeholder:text-primary/20"
+                    />
+                    <Button 
+                      variant="ghost" size="sm" 
+                      className="h-6 px-2 text-[8px] font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-black"
+                      onClick={handleAiCompose}
+                    >
+                      Compose
+                    </Button>
+                 </div>
+              </div>
           </div>
           
           <div className="flex flex-wrap items-center gap-12 bg-black/30 p-6 rounded-3xl border border-white/5">
@@ -540,7 +611,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
           <div className="flex items-center gap-2 bg-black/20 p-2 rounded-full border border-primary/10">
             <Button variant="ghost" size="icon" className="rounded-full h-12 w-12 text-primary hover:bg-primary/10" onClick={() => {
               db.saveTrack({ id: track?.id || crypto.randomUUID(), userId: user.id, title, bpm, numChannels, numSteps, grid, channelSettings, selectedClips: selectedClipsForChannel, createdAt: Date.now() });
-              toast({ title: "Session Saved" });
+              toast({ title: "Session Saved", className: "gold-border" });
             }}>
               <Save className="w-5 h-5" />
             </Button>
@@ -559,20 +630,26 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       </div>
 
       {/* Main Track Grid */}
-      <div className="glass-panel rounded-[2.5rem] p-10 gold-shadow space-y-6 overflow-x-auto border-primary/20">
+      <div className="glass-panel rounded-[2.5rem] p-10 gold-shadow space-y-6 overflow-x-auto border-primary/20 bg-card/40 backdrop-blur-3xl">
         {Array.from({ length: numChannels }).map((_, chIdx) => {
           const s = channelSettings[chIdx.toString()] || DEFAULT_CHANNEL_SETTINGS;
           const selId = selectedClipsForChannel[chIdx.toString()] || '';
+          const isTriggeringNow = grid[`${chIdx}-${currentStep}`];
+          
           return (
-            <div key={chIdx} className="flex items-center gap-6 group animate-in fade-in slide-in-from-left-4 duration-500">
-              {/* Channel Strip (Quick Edit Area) */}
-              <div className="w-[380px] shrink-0 flex items-center gap-4 bg-black/40 p-4 rounded-3xl gold-border relative">
+            <div key={chIdx} className={cn("flex items-center gap-6 group transition-all duration-300", isTriggeringNow ? "scale-[1.01]" : "")}>
+              {/* Channel Strip */}
+              <div className={cn(
+                "w-[380px] shrink-0 flex items-center gap-4 bg-black/40 p-4 rounded-3xl gold-border relative transition-all duration-200",
+                isTriggeringNow ? "border-primary/60 bg-primary/5" : ""
+              )}>
                 <div className="flex flex-col gap-2">
                   <button
                     onClick={() => { if (selId) playClip(selId, chIdx.toString(), initAudioContext().currentTime); }}
                     className={cn(
                       "w-12 h-12 rounded-xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 shadow-lg shrink-0", 
-                      s.muted ? "bg-neutral-800" : s.color
+                      s.muted ? "bg-neutral-800" : s.color,
+                      isTriggeringNow ? "animate-pulse ring-4 ring-primary/20" : ""
                     )}
                   >
                     <Music className={cn("w-6 h-6", s.muted ? "text-muted-foreground" : "text-black")} />
@@ -611,7 +688,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                     </div>
                   </div>
 
-                  {/* Simple Mixer Sliders */}
                   <div className="space-y-2">
                     <div className="flex items-center gap-3">
                       <Volume1 className="w-3 h-3 text-muted-foreground" />
@@ -625,7 +701,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 </div>
 
                 <div className="flex items-center gap-1">
-                  {/* Advanced Sampler Dialog */}
                   <Dialog>
                     <DialogTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10">
@@ -648,7 +723,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                       </DialogHeader>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 overflow-y-auto max-h-[60vh] pr-4 custom-scrollbar">
-                        {/* Basic Controls Group */}
                         <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5 gold-border">
                           <h4 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
                             <Volume1 className="w-4 h-4" /> Gain & Panning
@@ -669,7 +743,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                           </div>
                         </div>
 
-                        {/* Sample Modification Group */}
                         <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5 gold-border">
                           <h4 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
                             <Scissors className="w-4 h-4" /> Trim & Edit
@@ -696,7 +769,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                           </div>
                         </div>
 
-                        {/* Envelope (ADSR) Group */}
                         <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5 gold-border">
                           <h4 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
                             <Timer className="w-4 h-4" /> ADSR Envelope
@@ -717,7 +789,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                           </div>
                         </div>
 
-                        {/* Effects Rack Group */}
                         <div className="space-y-6 bg-black/40 p-8 rounded-[2rem] border border-white/5 lg:col-span-3 gold-border">
                           <h4 className="text-[10px] font-black uppercase text-primary tracking-widest flex items-center gap-2">
                             <Sparkles className="w-4 h-4" /> Effects Rack
@@ -757,7 +828,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                         <Button 
                           className="bg-primary text-black font-black uppercase tracking-[0.3em] rounded-full h-14 w-full md:w-auto px-12 shadow-2xl hover:bg-primary/90"
                           onClick={() => {
-                            toast({ title: "Modifications Saved", description: "All sampler parameters committed to track memory." });
+                            toast({ title: "Modifications Saved" });
                           }}
                         >
                           <Save className="w-5 h-5 mr-3" /> Commit Changes
@@ -792,11 +863,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                         "w-14 h-full rounded-2xl transition-all duration-300 flex items-center justify-center relative overflow-hidden shrink-0 group/cell gold-shadow",
                         isCurrent ? "scale-110 z-10" : "scale-100",
                         clip 
-                          ? `${s.muted ? "bg-neutral-800 opacity-40" : s.color} shadow-2xl ring-2 ring-white/30 translate-y-[-2px]` 
+                          ? `${s.muted ? "bg-neutral-800 opacity-40" : s.color} shadow-2xl ring-2 ring-white/30 translate-y-[-2px] brightness-125` 
                           : "bg-neutral-800/80 hover:bg-neutral-700/80 border border-white/5",
                         isMajorBeat && !clip ? "bg-neutral-800 border-white/10" : "",
                         isCurrent && !clip ? "ring-2 ring-primary/40 bg-neutral-700" : "",
-                        s.muted && clip && "grayscale"
+                        s.muted && clip && "grayscale",
+                        isCurrent && clip && "brightness-150 shadow-[0_0_25px_rgba(250,204,21,0.5)]"
                       )}
                     >
                       {CharIcon && <CharIcon className={cn("w-7 h-7 transition-transform group-hover/cell:scale-125", isCurrent ? "animate-bounce text-black" : "text-black/80")} />}
