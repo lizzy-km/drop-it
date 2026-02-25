@@ -8,7 +8,7 @@ import {
   Loader2, Zap, Waves, Sparkles, Mic2, VolumeX, Volume2, 
   RotateCcw, Scissors, Timer, Settings, Volume1, Maximize2, 
   Gauge, BrainCircuit, Wand2, Activity, Sliders, Repeat,
-  ChevronRight, ArrowRightLeft
+  ChevronRight, ArrowRightLeft, FastForward, Clock
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { CHARACTER_TYPES } from '@/components/character-icons';
@@ -52,7 +52,6 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
 // --- KINETIC VISUAL COMPONENTS ---
 
 const VisualEnvelope = ({ attack, release }: { attack: number, release: number }) => {
-  // attack: 0-2s, release: 0-2s. Normalized for visual 0-1
   const a = (attack / 2) * 100;
   const r = (release / 2) * 100;
   
@@ -131,7 +130,6 @@ const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }) => {
         ctx.fillStyle = gradient;
         ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
         
-        // Glow effect
         if (dataArray[i] > 200) {
           ctx.shadowBlur = 15;
           ctx.shadowColor = 'rgba(250, 204, 21, 0.5)';
@@ -184,11 +182,16 @@ export function RhythmGrid({ user, clips, track }: {
     Object.fromEntries(Array.from({ length: DEFAULT_CHANNELS }).map((_, i) => [i.toString(), '']))
   );
 
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const schedulerTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const masterAnalyserRef = useRef<AnalyserNode | null>(null);
   const audioBuffersRef = useRef<Record<string, AudioBuffer>>({});
   const reversedBuffersRef = useRef<Record<string, AudioBuffer>>({});
+  
+  const nextNoteTimeRef = useRef<number>(0);
+  const currentStepRef = useRef<number>(0);
+  const lookAheadTime = 0.1; // 100ms lookahead
+  const scheduleInterval = 25; // 25ms polling
 
   const initAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
@@ -223,6 +226,18 @@ export function RhythmGrid({ user, clips, track }: {
     }
   }, [initAudioContext]);
 
+  const makeDistortionCurve = (amount: number) => {
+    const k = amount * 100;
+    const n_samples = 44100;
+    const curve = new Float32Array(n_samples);
+    const deg = Math.PI / 180;
+    for (let i = 0; i < n_samples; ++i) {
+      const x = (i * 2) / n_samples - 1;
+      curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
+    }
+    return curve;
+  };
+
   const playClip = useCallback(async (clipId: string, channelIdx: string, scheduledTime?: number) => {
     const settings = channelSettings[channelIdx] || DEFAULT_CHANNEL_SETTINGS;
     if (settings.muted && !scheduledTime) return;
@@ -239,10 +254,10 @@ export function RhythmGrid({ user, clips, track }: {
       if (settings.reversed) {
         if (!reversedBuffersRef.current[clipId]) {
           const rev = new AudioBuffer({ length: buffer.length, numberOfChannels: buffer.numberOfChannels, sampleRate: buffer.sampleRate });
-          for (let i = 0; i < buffer.numberOfChannels; i++) {
-            const data = buffer.getChannelData(i);
-            const revData = rev.getChannelData(i);
-            for (let j = 0; j < buffer.length; j++) revData[j] = data[buffer.length - 1 - j];
+          for (let i = 0; i < buffer.length; i++) {
+            for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+              rev.getChannelData(channel)[i] = buffer.getChannelData(channel)[buffer.length - 1 - i];
+            }
           }
           reversedBuffersRef.current[clipId] = rev;
         }
@@ -253,15 +268,11 @@ export function RhythmGrid({ user, clips, track }: {
       const gainNode = ctx.createGain();
       const panNode = ctx.createStereoPanner();
       const filterNode = ctx.createBiquadFilter();
-      
-      const semitoneFactor = Math.pow(2, 1/12);
-      let playbackRate = settings.pitch;
-      if (settings.autoTune > 0) {
-        const currentSteps = Math.log(playbackRate) / Math.log(semitoneFactor);
-        const snappedSteps = Math.round(currentSteps);
-        playbackRate = (playbackRate * (1 - settings.autoTune)) + (Math.pow(semitoneFactor, snappedSteps) * settings.autoTune);
-      }
+      const distortionNode = ctx.createWaveShaper();
+      const delayNode = ctx.createDelay(1.0);
+      const delayGain = ctx.createGain();
 
+      const playbackRate = settings.pitch;
       source.buffer = buffer;
       source.playbackRate.value = playbackRate;
       panNode.pan.value = settings.pan;
@@ -276,10 +287,27 @@ export function RhythmGrid({ user, clips, track }: {
       gainNode.gain.setValueAtTime(settings.volume, Math.max(startTime + duration - settings.release, startTime + settings.attack));
       gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
 
+      // Effects Routing
       source.connect(filterNode);
-      filterNode.connect(gainNode);
+      filterNode.connect(distortionNode);
+      
+      if (settings.distortion > 0) {
+        distortionNode.curve = makeDistortionCurve(settings.distortion);
+      }
+
+      distortionNode.connect(gainNode);
       gainNode.connect(panNode);
-      gainNode.connect(masterAnalyserRef.current?.parentElement || ctx.destination);
+      panNode.connect(masterAnalyserRef.current || ctx.destination);
+
+      // Simple Delay Logic (Neural Space)
+      if (settings.delay > 0) {
+        delayNode.delayTime.value = 0.25; // 1/4 note approx
+        delayGain.gain.value = settings.delay * 0.5;
+        panNode.connect(delayNode);
+        delayNode.connect(delayGain);
+        delayGain.connect(delayNode);
+        delayGain.connect(masterAnalyserRef.current || ctx.destination);
+      }
 
       source.start(startTime, trimStartOffset, duration);
     } catch (e) {
@@ -287,22 +315,41 @@ export function RhythmGrid({ user, clips, track }: {
     }
   }, [clips, loadAudio, initAudioContext, channelSettings]);
 
+  // High-Precision Scheduler
+  const scheduleNextNote = useCallback(() => {
+    const ctx = initAudioContext();
+    const secondsPerBeat = 60.0 / bpm;
+    const secondsPerStep = secondsPerBeat / 4;
+
+    while (nextNoteTimeRef.current < ctx.currentTime + lookAheadTime) {
+      const stepToSchedule = currentStepRef.current;
+      for (let c = 0; c < numChannels; c++) {
+        const clipIds = grid[`${c}-${stepToSchedule}`];
+        if (clipIds) {
+          clipIds.forEach(id => playClip(id, c.toString(), nextNoteTimeRef.current));
+        }
+      }
+      
+      nextNoteTimeRef.current += secondsPerStep;
+      currentStepRef.current = (currentStepRef.current + 1) % numSteps;
+      
+      // Update UI (approximately)
+      setTimeout(() => setCurrentStep(stepToSchedule), (nextNoteTimeRef.current - ctx.currentTime) * 1000);
+    }
+  }, [bpm, grid, numChannels, numSteps, playClip, initAudioContext]);
+
   useEffect(() => {
     if (isPlaying) {
-      const stepInterval = (60 / bpm) / 4 * 1000;
-      timerRef.current = setInterval(() => {
-        setCurrentStep(prev => {
-          const next = (prev + 1) % numSteps;
-          for (let c = 0; c < numChannels; c++) {
-            const clipIds = grid[`${c}-${next}`];
-            if (clipIds) clipIds.forEach(id => playClip(id, c.toString()));
-          }
-          return next;
-        });
-      }, stepInterval);
+      const ctx = initAudioContext();
+      nextNoteTimeRef.current = ctx.currentTime;
+      currentStepRef.current = 0;
+      schedulerTimerRef.current = setInterval(scheduleNextNote, scheduleInterval);
+    } else {
+      if (schedulerTimerRef.current) clearInterval(schedulerTimerRef.current);
+      setCurrentStep(-1);
     }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isPlaying, bpm, grid, playClip, numChannels, numSteps]);
+    return () => { if (schedulerTimerRef.current) clearInterval(schedulerTimerRef.current); };
+  }, [isPlaying, scheduleNextNote, initAudioContext]);
 
   const updateChannelSetting = (idx: string, key: keyof ChannelSettings, val: any) => {
     setChannelSettings(p => ({ ...p, [idx]: { ...p[idx], [key]: val } }));
@@ -346,7 +393,6 @@ export function RhythmGrid({ user, clips, track }: {
 
   return (
     <div className="space-y-12">
-      {/* Cinematic Control Hub */}
       <div className="glass-panel p-10 rounded-[3rem] gold-shadow relative overflow-hidden group">
         <div className="absolute inset-0 studio-grid-bg opacity-10" />
         
@@ -413,13 +459,12 @@ export function RhythmGrid({ user, clips, track }: {
         </div>
       </div>
 
-      {/* Kinetic Sequencer Engine */}
       <div className="glass-panel rounded-[3rem] p-12 gold-shadow overflow-x-auto space-y-8 bg-black/40">
         {Array.from({ length: numChannels }).map((_, chIdx) => {
           const chKey = chIdx.toString();
           const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
           const selId = selectedClipsForChannel[chKey] || '';
-          const isActive = grid[`${chIdx}-${currentStep}`];
+          const isActive = chIdx.toString() === "0" && currentStep !== -1; // Visualization only
 
           return (
             <div key={chIdx} className={cn("flex items-center gap-8 transition-all duration-500", isActive ? "translate-x-2" : "")}>
@@ -431,8 +476,7 @@ export function RhythmGrid({ user, clips, track }: {
                   onClick={() => { if (selId) playClip(selId, chKey); }}
                   className={cn(
                     "w-16 h-16 rounded-[1.5rem] flex items-center justify-center transition-all active:scale-90 shadow-2xl shrink-0",
-                    s.muted ? "bg-neutral-800" : s.color,
-                    isActive ? "scale-110 brightness-125" : ""
+                    s.muted ? "bg-neutral-800" : s.color
                   )}
                 >
                   <Music className={cn("w-8 h-8", s.muted ? "text-muted-foreground" : "text-black")} />
@@ -505,7 +549,7 @@ export function RhythmGrid({ user, clips, track }: {
                                 </div>
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Auto_Tune_Quantization</span>
+                                      <span>Auto_Tune</span>
                                       <span className="text-primary">{Math.round(s.autoTune * 100)}%</span>
                                    </div>
                                    <Slider value={[s.autoTune * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'autoTune', v[0] / 100)} />
@@ -525,14 +569,14 @@ export function RhythmGrid({ user, clips, track }: {
                              <div className="space-y-6">
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Attack_Signal</span>
+                                      <span>Attack</span>
                                       <span className="text-primary">{s.attack.toFixed(2)}s</span>
                                    </div>
                                    <Slider value={[s.attack * 100]} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'attack', v[0] / 100)} />
                                 </div>
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Release_Signal</span>
+                                      <span>Release</span>
                                       <span className="text-primary">{s.release.toFixed(2)}s</span>
                                    </div>
                                    <Slider value={[s.release * 100]} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'release', v[0] / 100)} />
@@ -545,28 +589,25 @@ export function RhythmGrid({ user, clips, track }: {
                              <div className="absolute top-0 right-0 p-4">
                                 <Sparkles className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
                              </div>
-                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Harmonics_Engine</h4>
+                             <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Harmonics</h4>
                              <div className="space-y-6">
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Pitch_Shift</span>
+                                      <span>Pitch</span>
                                       <span className="text-primary">{s.pitch.toFixed(2)}x</span>
                                    </div>
                                    <Slider value={[s.pitch * 50]} min={25} max={200} onValueChange={(v) => updateChannelSetting(chKey, 'pitch', v[0] / 50)} />
                                 </div>
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Filter_Cutoff</span>
+                                      <span>Cutoff</span>
                                       <span className="text-primary">{Math.round(s.cutoff * 100)}%</span>
                                    </div>
-                                   <div className="relative group/cutoff">
-                                      <div className="absolute inset-0 bg-primary/5 blur-xl group-hover/cutoff:bg-primary/10 transition-colors rounded-full" />
-                                      <Slider value={[s.cutoff * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'cutoff', v[0] / 100)} className="relative z-10" />
-                                   </div>
+                                   <Slider value={[s.cutoff * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'cutoff', v[0] / 100)} />
                                 </div>
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Drive_Distortion</span>
+                                      <span>Distortion</span>
                                       <span className="text-primary">{Math.round(s.distortion * 100)}%</span>
                                    </div>
                                    <Slider value={[s.distortion * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'distortion', v[0] / 100)} />
@@ -583,21 +624,24 @@ export function RhythmGrid({ user, clips, track }: {
                              <div className="space-y-6">
                                 <div className="space-y-3">
                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                                      <span>Stereo_Panning</span>
-                                      <span className="text-primary">{s.pan > 0 ? 'R ' : s.pan < 0 ? 'L ' : ''}{Math.abs(s.pan).toFixed(2)}</span>
+                                      <span>Panning</span>
+                                      <span className="text-primary">{s.pan.toFixed(2)}</span>
                                    </div>
-                                   <div className="flex items-center gap-4">
-                                      <span className="text-[8px] font-bold opacity-20">L</span>
-                                      <Slider value={[s.pan * 50 + 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chKey, 'pan', (v[0] - 50) / 50)} className="flex-1" />
-                                      <span className="text-[8px] font-bold opacity-20">R</span>
+                                   <Slider value={[s.pan * 50 + 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chKey, 'pan', (v[0] - 50) / 50)} />
+                                </div>
+                                <div className="space-y-3">
+                                   <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                      <span>Delay_Send</span>
+                                      <span className="text-primary">{Math.round(s.delay * 100)}%</span>
                                    </div>
+                                   <Slider value={[s.delay * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'delay', v[0] / 100)} />
                                 </div>
                                 <div className="pt-6">
                                    <Button 
-                                      className="w-full h-20 rounded-[1.5rem] bg-primary text-black font-black uppercase tracking-[0.3em] hover:bg-primary/90 shadow-2xl transition-all group/audition"
+                                      className="w-full h-20 rounded-[1.5rem] bg-primary text-black font-black uppercase tracking-[0.3em] hover:bg-primary/90 shadow-2xl transition-all"
                                       onClick={() => { if (selId) playClip(selId, chKey); }}
                                    >
-                                      <Play className="w-6 h-6 mr-3 fill-current group-hover/audition:scale-125 transition-transform" /> Audition_Signal
+                                      <Play className="w-6 h-6 mr-3 fill-current" /> Audition_Signal
                                    </Button>
                                 </div>
                              </div>
@@ -645,8 +689,7 @@ export function RhythmGrid({ user, clips, track }: {
                       className={cn(
                         "w-16 h-full rounded-2xl transition-all duration-300 flex items-center justify-center relative shrink-0",
                         clip ? `${s.color} shadow-2xl brightness-125 translate-y-[-4px]` : "bg-neutral-800/40 hover:bg-neutral-700/60 border border-white/5",
-                        isCurrent ? "ring-4 ring-primary/40 scale-110 z-10" : "scale-100",
-                        clip && isCurrent ? "step-glow-active" : ""
+                        isCurrent ? "ring-4 ring-primary/40 scale-110 z-10" : "scale-100"
                       )}
                     >
                       {CharIcon && <CharIcon className={cn("w-7 h-7", isCurrent ? "animate-bounce text-black" : "text-black/80")} />}
