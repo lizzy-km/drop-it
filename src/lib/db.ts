@@ -93,7 +93,12 @@ export const db = {
 
   saveClip: (clip: AudioClip) => {
     const clips = db.getClips();
-    clips.push(clip);
+    const existingIdx = clips.findIndex(c => c.id === clip.id);
+    if (existingIdx > -1) {
+      clips[existingIdx] = clip;
+    } else {
+      clips.push(clip);
+    }
     localStorage.setItem(STORAGE_KEYS.CLIPS, JSON.stringify(clips));
   },
 

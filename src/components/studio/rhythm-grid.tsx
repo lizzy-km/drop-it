@@ -83,6 +83,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   const lookAheadTime = 0.1; 
   const scheduleInterval = 25; 
 
+  // Deduplicate clips for the select dropdown to avoid key collision errors
+  const uniqueClips = Array.from(new Map(clips.map(c => [c.id, c])).values());
+
   const initAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -348,6 +351,47 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     setChannelSettings(p => ({ ...p, [idx]: { ...p[idx], [key]: val } }));
   };
 
+  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const config = JSON.parse(event.target?.result as string) as Track;
+        const newId = crypto.randomUUID();
+        const importedTrack: Track = {
+          ...config,
+          id: newId,
+          userId: user.id,
+          createdAt: Date.now(),
+        };
+        db.saveTrack(importedTrack);
+        if (onImportRefresh) onImportRefresh();
+        toast({ title: "Project Config Imported" });
+      } catch (err) {
+        toast({ title: "Import Failed", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleExportConfig = () => {
+    const configData: Track = {
+      id: track?.id || crypto.randomUUID(),
+      userId: user.id,
+      title, bpm, numChannels, numSteps, grid, channelSettings,
+      selectedClips: selectedClipsForChannel,
+      createdAt: Date.now()
+    };
+    const blob = new Blob([JSON.stringify(configData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.replace(/\s+/g, '_')}_config.json`;
+    a.click();
+    toast({ title: "Config Exported" });
+  };
+
   return (
     <div className="space-y-12">
       <div className="glass-panel p-10 rounded-[3rem] gold-shadow relative overflow-hidden group">
@@ -427,6 +471,15 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-primary/20 text-primary hover:bg-primary/40" onClick={handleExportAudio} disabled={isExporting}>
                  {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                </Button>
+               <div className="flex gap-1">
+                 <label className="cursor-pointer">
+                    <div className="w-8 h-8 rounded-lg gold-border bg-black/40 text-primary hover:bg-primary/10 flex items-center justify-center">
+                      <FileUp className="w-4 h-4" />
+                    </div>
+                    <input type="file" accept=".json" className="hidden" onChange={handleImportConfig} />
+                 </label>
+                 <Button size="icon" className="w-8 h-8 rounded-lg gold-border bg-black/40 text-primary hover:bg-primary/10" onClick={handleExportConfig}><FileDown className="w-4 h-4" /></Button>
+               </div>
             </div>
           </div>
         </div>
@@ -454,7 +507,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                     onChange={(e) => setSelectedClipsForChannel(p => ({ ...p, [chKey]: e.target.value }))}
                   >
                     <option value="" className="bg-black">SELECT_CLIP</option>
-                    {clips.map(c => <option key={c.id} value={c.id} className="bg-black">{c.name}</option>)}
+                    {uniqueClips.map(c => <option key={c.id} value={c.id} className="bg-black">{c.name}</option>)}
                   </select>
                   <div className="flex items-center gap-4">
                      <input 
