@@ -4,8 +4,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 
 export const metadata: Metadata = {
-  title: 'DROP IT | Acoustic Neural Engine',
-  description: 'Professional-grade sonic architecture. Record, synthesize, and manifest rhythm with high-fidelity neural precision.',
+  title: 'DROP IT | Rhythm & Voice Studio',
+  description: 'A professional-grade web workstation for sample-accurate rhythm creation and high-fidelity WAV export.',
 };
 
 export const viewport: Viewport = {

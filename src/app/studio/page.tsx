@@ -74,23 +74,20 @@ function StudioContent() {
 
         <div className="flex items-center gap-10">
           <div className="hidden md:flex flex-col items-end">
-             <h2 className="text-xl font-black tracking-tighter leading-none text-primary uppercase">SESSION_{user.name.toUpperCase()}</h2>
+             <h2 className="text-xl font-black tracking-tighter leading-none text-primary uppercase">{user.name.toUpperCase()}_SESSION</h2>
              <div className="flex items-center gap-2 mt-1">
                 <span className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
-                <span className="text-[8px] font-black uppercase tracking-[0.3em] text-muted-foreground">Studio Live</span>
+                <span className="text-[8px] font-black uppercase tracking-[0.3em] text-muted-foreground">Recording Active</span>
              </div>
           </div>
           <div className="flex items-center gap-4 border-l border-white/5 pl-10">
             <ReactLink href="/browse">
                <Button variant="outline" className="rounded-full font-black px-8 h-12 border-primary/20 bg-black/20 hover:bg-primary/5 uppercase tracking-widest text-xs">
-                 My Drop
+                 My Library
                </Button>
             </ReactLink>
             <div className="relative">
               <img src={user.avatar} className="w-14 h-14 rounded-2xl object-cover ring-2 ring-primary/30" alt="" />
-              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center border-4 border-background">
-                <Zap className="w-2.5 h-2.5 text-black" />
-              </div>
             </div>
           </div>
         </div>
@@ -118,17 +115,17 @@ function StudioContent() {
             <div className="glass-panel rounded-[2.5rem] p-12 gold-border">
                <div className="flex items-center justify-between mb-10">
                  <h3 className="text-3xl font-black flex items-center gap-4 italic tracking-tighter text-primary">
-                   <Library className="w-7 h-7" /> SOUND_LIBRARY
+                   <Library className="w-7 h-7" /> STUDIO_ASSETS
                  </h3>
                  <span className="px-5 py-2 rounded-full bg-primary/10 text-[10px] font-black text-primary tracking-[0.2em] uppercase border border-primary/20">
-                   {clips.length} SAMPLES_LOADED
+                   {clips.length} CLIPS_LOADED
                  </span>
                </div>
 
                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
                  {clips.length === 0 ? (
                     <div className="col-span-full py-20 text-center text-muted-foreground font-black border-2 border-dashed border-primary/10 rounded-[2.5rem] bg-black/20">
-                       NO_ASSETS_FOUND. RECORD_SAMPLES_TO_BEGIN.
+                       AWAITING_SAMPLES. RECORD_OR_UPLOAD_TO_BEGIN.
                     </div>
                  ) : (
                    clips.map(clip => {
@@ -150,11 +147,11 @@ function StudioContent() {
                               </DialogTrigger>
                               <DialogContent className="glass-panel border-primary/20 rounded-[2rem] p-10 gold-shadow">
                                 <DialogHeader>
-                                  <DialogTitle className="text-2xl font-black italic tracking-tighter text-primary uppercase">Edit Asset</DialogTitle>
+                                  <DialogTitle className="text-2xl font-black italic tracking-tighter text-primary uppercase">Edit Sample</DialogTitle>
                                 </DialogHeader>
                                 <div className="space-y-8 py-6">
                                   <div className="space-y-3">
-                                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Clip Name</Label>
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Display Name</Label>
                                     <input 
                                       defaultValue={clip.name}
                                       id={`clip-name-${clip.id}`}
@@ -162,7 +159,7 @@ function StudioContent() {
                                     />
                                   </div>
                                   <div className="space-y-3">
-                                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Visualizer</Label>
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Visualizer Icon</Label>
                                     <div className="grid grid-cols-4 gap-4">
                                       {CHARACTER_TYPES.map(ct => (
                                         <button 
@@ -214,11 +211,11 @@ function StudioContent() {
                 <div className="space-y-8 font-bold text-sm leading-relaxed">
                   <div className="flex gap-5 items-start">
                     <div className="w-8 h-8 rounded-2xl bg-black flex items-center justify-center text-xs text-primary shrink-0 font-black">01</div>
-                    <p>Map custom recordings or uploads to any instrument track on the sequencer.</p>
+                    <p>Map your custom recordings or uploads to the instrument tracks below.</p>
                   </div>
                   <div className="flex gap-5 items-start">
                     <div className="w-8 h-8 rounded-2xl bg-black flex items-center justify-center text-xs text-primary shrink-0 font-black">02</div>
-                    <p>Sculpt each channel using Volume, Pitch, Pan, and Filter controls.</p>
+                    <p>Adjust Volume, Pitch, and ADSR to shape your sound for the final export.</p>
                   </div>
                 </div>
              </div>
@@ -226,7 +223,7 @@ function StudioContent() {
              <div className="glass-panel p-10 rounded-[3rem] space-y-6 gold-border">
                 <div className="flex items-center gap-4 text-primary">
                   <LayoutDashboard className="w-6 h-6" />
-                  <span className="font-black text-xs uppercase tracking-[0.3em]">SESSION_METRICS</span>
+                  <span className="font-black text-xs uppercase tracking-[0.3em]">STUDIO_METRICS</span>
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                   <div className="bg-black/40 p-6 rounded-[2rem] text-center gold-border">
