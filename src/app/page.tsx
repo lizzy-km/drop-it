@@ -53,8 +53,8 @@ export default function LandingPage() {
               <Zap className="w-4 h-4 text-primary" />
               Neural_Rhythm_Engine_Active
             </div>
-            <h1 className="text-8xl md:text-[12rem] font-black tracking-[-0.05em] leading-none animate-in fade-in slide-in-from-top-12 duration-1000">
-              DROP <span className="text-primary italic">IT.</span>
+            <h1 className="text-8xl md:text-[12rem] h-[250] w-[800] text-black flex justify-center items-center bg-primary font-black tracking-[-0.05em] leading-none animate-in fade-in slide-in-from-top-12 duration-1000">
+            DROP <span className="text-black italic">IT.</span>
             </h1>
             <p className="text-2xl md:text-3xl text-muted-foreground font-medium max-w-3xl mx-auto leading-relaxed animate-in fade-in duration-1000 delay-300">
               The world's most advanced neural workspace for sonic architecture. 
