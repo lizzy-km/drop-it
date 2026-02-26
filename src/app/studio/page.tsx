@@ -53,12 +53,19 @@ function StudioContent() {
   const updateClipMetadata = (id: string, name: string, characterType: string) => {
     const allClips = db.getClips();
     const newAllClips = allClips.map(c => c.id === id ? { ...c, name, characterType } : c);
-    localStorage.setItem('dropit_clips', JSON.stringify(newAllClips));
-    if (user) setClips(newAllClips.filter(c => c.userId === user.id));
+    
+    // Deduplicate before saving
+    const deduped = Array.from(new Map(newAllClips.map(c => [c.id, c])).values());
+    localStorage.setItem('dropit_clips', JSON.stringify(deduped));
+    
+    if (user) setClips(deduped.filter(c => c.userId === user.id));
     toast({ title: "Asset Updated" });
   };
 
   if (!user) return null;
+
+  // Final UI deduplication to ensure unique keys
+  const uniqueClips = Array.from(new Map(clips.map(c => [c.id, c])).values());
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-24 studio-grid-bg">
@@ -98,7 +105,7 @@ function StudioContent() {
           <RhythmGrid 
             key={loadedTrack?.id || 'new-track'} 
             user={user} 
-            clips={clips} 
+            clips={uniqueClips} 
             track={loadedTrack} 
             onSaveTrack={() => {}} 
             onImportRefresh={refreshClips}
@@ -118,17 +125,17 @@ function StudioContent() {
                    <Library className="w-7 h-7" /> STUDIO_ASSETS
                  </h3>
                  <span className="px-5 py-2 rounded-full bg-primary/10 text-[10px] font-black text-primary tracking-[0.2em] uppercase border border-primary/20">
-                   {clips.length} CLIPS_LOADED
+                   {uniqueClips.length} CLIPS_LOADED
                  </span>
                </div>
 
                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                 {clips.length === 0 ? (
+                 {uniqueClips.length === 0 ? (
                     <div className="col-span-full py-20 text-center text-muted-foreground font-black border-2 border-dashed border-primary/10 rounded-[2.5rem] bg-black/20">
                        AWAITING_SAMPLES. RECORD_OR_UPLOAD_TO_BEGIN.
                     </div>
                  ) : (
-                   clips.map(clip => {
+                   uniqueClips.map(clip => {
                      const charType = CHARACTER_TYPES.find(ct => ct.id === clip.characterType) || CHARACTER_TYPES[0];
                      const CharIcon = charType.icon;
                      return (
@@ -211,7 +218,7 @@ function StudioContent() {
                 <div className="space-y-8 font-bold text-sm leading-relaxed">
                   <div className="flex gap-5 items-start">
                     <div className="w-8 h-8 rounded-2xl bg-black flex items-center justify-center text-xs text-primary shrink-0 font-black">01</div>
-                    <p>Map your custom recordings or uploads to the instrument tracks below.</p>
+                    <p>Map your recordings or uploads to the instrument tracks.</p>
                   </div>
                   <div className="flex gap-5 items-start">
                     <div className="w-8 h-8 rounded-2xl bg-black flex items-center justify-center text-xs text-primary shrink-0 font-black">02</div>
@@ -227,7 +234,7 @@ function StudioContent() {
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                   <div className="bg-black/40 p-6 rounded-[2rem] text-center gold-border">
-                    <div className="text-3xl font-black text-primary">{clips.length}</div>
+                    <div className="text-3xl font-black text-primary">{uniqueClips.length}</div>
                     <div className="text-[9px] font-black uppercase text-muted-foreground tracking-widest mt-1">Samples</div>
                   </div>
                 </div>

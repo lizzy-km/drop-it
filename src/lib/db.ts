@@ -59,8 +59,8 @@ export const db = {
     if (typeof window === 'undefined') return [];
     const data = localStorage.getItem(STORAGE_KEYS.USERS);
     return data ? JSON.parse(data) : [
-      { id: 'u1', name: 'Neural Producer', avatar: 'https://picsum.photos/seed/u1/200' },
-      { id: 'u2', name: 'Sonic Architect', avatar: 'https://picsum.photos/seed/u2/200' }
+      { id: 'u1', name: 'Producer 01', avatar: 'https://picsum.photos/seed/u1/200' },
+      { id: 'u2', name: 'Producer 02', avatar: 'https://picsum.photos/seed/u2/200' }
     ];
   },
   
@@ -87,8 +87,14 @@ export const db = {
     if (typeof window === 'undefined') return [];
     const data = localStorage.getItem(STORAGE_KEYS.CLIPS);
     let clips: AudioClip[] = data ? JSON.parse(data) : [];
-    if (userId) clips = clips.filter(c => c.userId === userId);
-    return clips;
+    
+    // Deduplicate logic to ensure unique clips
+    const uniqueMap = new Map();
+    clips.forEach(clip => uniqueMap.set(clip.id, clip));
+    const dedupedClips = Array.from(uniqueMap.values());
+    
+    if (userId) return dedupedClips.filter(c => c.userId === userId);
+    return dedupedClips;
   },
 
   saveClip: (clip: AudioClip) => {
@@ -99,7 +105,11 @@ export const db = {
     } else {
       clips.push(clip);
     }
-    localStorage.setItem(STORAGE_KEYS.CLIPS, JSON.stringify(clips));
+    
+    // Hard deduplication before storage commit
+    const uniqueMap = new Map();
+    clips.forEach(c => uniqueMap.set(c.id, c));
+    localStorage.setItem(STORAGE_KEYS.CLIPS, JSON.stringify(Array.from(uniqueMap.values())));
   },
 
   deleteClip: (clipId: string) => {
@@ -111,8 +121,14 @@ export const db = {
     if (typeof window === 'undefined') return [];
     const data = localStorage.getItem(STORAGE_KEYS.TRACKS);
     let tracks: Track[] = data ? JSON.parse(data) : [];
-    if (userId) tracks = tracks.filter(t => t.userId === userId);
-    return tracks;
+    
+    // Deduplicate tracks by ID
+    const uniqueMap = new Map();
+    tracks.forEach(t => uniqueMap.set(t.id, t));
+    const dedupedTracks = Array.from(uniqueMap.values());
+    
+    if (userId) return dedupedTracks.filter(t => t.userId === userId);
+    return dedupedTracks;
   },
 
   getTrack: (trackId: string): Track | null => {
@@ -125,7 +141,10 @@ export const db = {
     const existing = tracks.findIndex(t => t.id === track.id);
     if (existing > -1) tracks[existing] = track;
     else tracks.push(track);
-    localStorage.setItem(STORAGE_KEYS.TRACKS, JSON.stringify(tracks));
+    
+    const uniqueMap = new Map();
+    tracks.forEach(t => uniqueMap.set(t.id, t));
+    localStorage.setItem(STORAGE_KEYS.TRACKS, JSON.stringify(Array.from(uniqueMap.values())));
   },
 
   deleteTrack: (trackId: string) => {
