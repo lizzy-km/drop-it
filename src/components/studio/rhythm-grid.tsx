@@ -81,7 +81,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   const scheduleInterval = 25; 
 
   const uniqueClips = React.useMemo(() => {
-    return Array.from(new Map(clips.map(c => [c.id, c])).values());
+    // Reconcile and deduplicate clips to ensure unique IDs for rendering
+    const uniqueMap = new Map();
+    clips.forEach(c => uniqueMap.set(c.id, c));
+    return Array.from(uniqueMap.values()) as AudioClip[];
   }, [clips]);
 
   const initAudioContext = useCallback(() => {
@@ -155,6 +158,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       source.playbackRate.value = playbackRate;
       panNode.pan.value = settings.pan;
       
+      // Professional filter node access: frequency is an AudioParam
       filterNode.frequency.setValueAtTime(200 + (Math.pow(settings.cutoff, 2) * 19800), scheduledTime || ctx.currentTime);
 
       const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
@@ -226,20 +230,39 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   }, [isPlaying, scheduleNextNote, initAudioContext]);
 
   const randomizePattern = () => {
-    if (uniqueClips.length === 0) {
-      toast({ title: "No Samples Found", description: "Please record or upload sounds first." });
-      return;
-    }
     const newGrid: Record<string, string[]> = { ...grid };
+    let channelsUpdated = 0;
+
     for (let c = 0; c < numChannels; c++) {
-      const clipId = selectedClipsForChannel[c.toString()] || (uniqueClips.length > 0 ? uniqueClips[Math.floor(Math.random() * uniqueClips.length)].id : "");
+      const clipId = selectedClipsForChannel[c.toString()];
+      // Only randomize for tracks that have a sound clip chosen by the user
       if (!clipId) continue;
+      
+      channelsUpdated++;
       for (let s = 0; s < numSteps; s++) {
-        if (Math.random() > 0.8) newGrid[`${c}-${s}`] = [clipId];
+        // Random chance of triggering the sample on this step
+        if (Math.random() > 0.8) {
+          newGrid[`${c}-${s}`] = [clipId];
+        } else {
+          // Optional: Clear existing if not randomizing, or leave as is? 
+          // We'll leave existing as is or clear based on preference. 
+          // Here we clear for a fresh "randomized" feel for this channel.
+          delete newGrid[`${c}-${s}`];
+        }
       }
     }
+    
+    if (channelsUpdated === 0) {
+      toast({ 
+        title: "No Clips Assigned", 
+        description: "Choose a sample for at least one track before randomizing.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
     setGrid(newGrid);
-    toast({ title: "Grid Populated" });
+    toast({ title: "Pattern Randomized", description: `Updated ${channelsUpdated} active tracks.` });
   };
 
   const shiftPattern = (direction: 'left' | 'right') => {
@@ -411,7 +434,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                   </div>
                   <div className="flex gap-2">
                     <Button variant="ghost" size="sm" onClick={randomizePattern} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/20 border border-primary/10 gap-2">
-                      <Dices className="w-3.5 h-3.5" /> Random
+                      <Dices className="w-3.5 h-3.5" /> Randomize
                     </Button>
                     <div className="flex bg-black/40 rounded-xl border border-primary/10 overflow-hidden">
                       <Button variant="ghost" size="icon" onClick={() => shiftPattern('left')} className="h-10 w-10 text-primary hover:bg-primary/20">
@@ -530,7 +553,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
               <div className="flex-1 flex gap-3 h-[120px] items-center overflow-x-auto pb-4 custom-scrollbar">
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const clipIds = grid[`${chIdx}-${stepIdx}`] || [];
-                  const clip = clips.find(c => c.id === clipIds[0]);
+                  const clip = uniqueClips.find(c => c.id === clipIds[0]);
                   const isCurrent = stepIdx === currentStep;
                   return (
                     <button
