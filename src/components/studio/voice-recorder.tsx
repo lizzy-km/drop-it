@@ -135,7 +135,7 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
                 <Save className="w-4 h-4 mr-2" /> Commit
               </Button>
 
-              <Button className="flex-1 h-14 rounded-full font-black uppercase tracking-widest bg-destructive text-black hover:bg-primary/90 shadow-xl" onClick={saveClip}>
+              <Button className="flex-1 h-14 rounded-full font-black uppercase tracking-widest bg-destructive text-black hover:bg-primary/90 shadow-xl" >
                 Cancel
               </Button>
             </div>
