@@ -418,20 +418,21 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     <div className="space-y-12">
       <div className="glass-panel p-10 rounded-[3rem] gold-shadow relative overflow-hidden group">
         <div className="absolute inset-0 studio-grid-bg opacity-10" />
-        <div className="flex flex-col lg:flex-row items-center justify-between gap-12 relative z-10">
+        <div className="flex w-full flex-col lg:flex-row items-center justify-between gap-12 relative z-10">
           <div className="flex-1 space-y-6 w-full">
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value.toUpperCase())}
-              className="text-6xl font-black italic tracking-tighter bg-transparent border-none focus:ring-0 w-full outline-none text-primary selection:bg-white"
+              className="text-3xl font-black italic tracking-tighter bg-transparent border-none focus:ring-0 w-full outline-none text-primary selection:bg-white"
               placeholder="PROJECT_TITLE"
             />
             <div className="flex flex-col md:flex-row items-center gap-8">
                <div className="flex items-center gap-4 h-[60] rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full bg-black/20">
-                  <div className="flex items-center gap-2 px-4 border-r border-primary/10">
+                   <MasterVisualizer analyser={masterAnalyserRef.current} />
+                  {/* <div className="flex items-center gap-2 px-4 border-r border-primary/10">
                     <Gauge className="w-5 h-5 text-primary" />
                     <span className="text-[9px] font-black uppercase tracking-widest text-primary">Grid Tools</span>
-                  </div>
+                  </div> */}
                   <div className="flex gap-2">
                     <Button variant="ghost" size="sm" onClick={randomizePattern} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary hover:bg-primary/20 border border-primary/10 gap-2">
                       <Dices className="w-3.5 h-3.5" /> Randomize
@@ -453,11 +454,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                     </Button>
                   </div>
                </div>
-               <div className="w-full md:w-64">
+               {/* <div className="w-full md:w-64">
                   <MasterVisualizer analyser={masterAnalyserRef.current} />
-               </div>
+               </div> */}
             </div>
           </div>
+
 
           <div className="flex items-center gap-6">
             <div className="flex flex-col items-center gap-2">

@@ -96,7 +96,7 @@ export const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }
   }, [analyser]);
 
   return (
-    <div className="h-24 w-full bg-black/40 rounded-[1rem] overflow-hidden border border-primary/10 relative shadow-inner">
+    <div className="  w-full bg-black/40 rounded-[1rem] overflow-hidden border border-primary/10 relative shadow-inner">
       <canvas ref={canvasRef} width={800} height={100} className="w-full h-full" />
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
         <Activity className="w-4 h-4 text-primary" />
