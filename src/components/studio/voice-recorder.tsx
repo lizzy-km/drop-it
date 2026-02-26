@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Save, RotateCcw, Disc } from 'lucide-react';
+import { Mic, Square, Save, RotateCcw, Disc, Cross } from 'lucide-react';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
 import { db, User } from '@/lib/db';
@@ -65,7 +65,7 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
     <div className="glass-panel rounded-[2.5rem] p-12 space-y-10 flex flex-col gold-border">
       <div className="flex items-center justify-between">
         <h3 className="text-3xl font-black flex items-center gap-4 italic tracking-tighter text-primary">
-          <Mic className="w-7 h-7" /> CAPTURE
+          <Mic className="w-7 h-7  " /> CAPTURE
         </h3>
         <input 
           value={clipName}
@@ -77,9 +77,9 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
 
       <div className="flex-1 flex flex-col items-center justify-center bg-black/40 rounded-[2.5rem] p-12 min-h-[250px] border border-primary/10 relative group overflow-hidden shadow-inner">
         {isRecording ? (
-          <div className="flex flex-col items-center gap-8">
+          <div  className="flex flex-col items-center gap-8">
             <div className="w-28 h-28 rounded-full bg-red-500/10 border-4 border-red-500 flex items-center justify-center animate-pulse">
-              <div className="w-12 h-12 bg-red-500 rounded-xl" />
+              <div onClick={stopRecording} className="w-12 h-12 cursor-pointer bg-red-500 rounded-xl" />
             </div>
             <p className="text-red-500 font-black text-xs uppercase tracking-[0.4em]">Signal Recording...</p>
           </div>
@@ -88,12 +88,17 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
             <div className="w-full h-16 bg-neutral-900 rounded-3xl border border-white/5 flex items-center px-6">
                <audio src={audioUrl} controls className="w-full h-8 opacity-60 invert" />
             </div>
-            <div className="flex gap-4 w-full">
+            <div className="flex gap-3 flex-wrap w-full">
               <Button variant="outline" className="flex-1 h-14 rounded-full font-black uppercase tracking-widest border-primary/20 bg-black/20" onClick={() => setAudioUrl(null)}>
                 <RotateCcw className="w-4 h-4 mr-2" /> Redo
               </Button>
+
               <Button className="flex-1 h-14 rounded-full font-black uppercase tracking-widest bg-primary text-black hover:bg-primary/90 shadow-xl" onClick={saveClip}>
                 <Save className="w-4 h-4 mr-2" /> Commit
+              </Button>
+              
+               <Button className="flex-1 h-14 rounded-full font-black uppercase tracking-widest bg-destructive text-black hover:bg-primary/90 shadow-xl" onClick={saveClip}>
+                <Cross className="w-4 h-4 mr-2" /> Cancel
               </Button>
             </div>
           </div>
