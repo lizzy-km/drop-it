@@ -1,19 +1,16 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { 
   Play, Square, Music, Save, Download, Plus, Trash2, 
-  Loader2, Gauge, Dices, ArrowLeft, ArrowRight, Copy, X, AlertTriangle,
+  Loader2, Gauge, Dices, ArrowLeft, ArrowRight, Copy, X,
   FileUp, FileDown
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
-import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { Slider } from '@/components/ui/slider';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { makeDistortionCurve, audioBufferToWav } from '@/lib/audio-utils';
 import { MasterVisualizer } from './visualizers';
 import { ChannelSettingsDialog } from './channel-settings-dialog';
@@ -84,7 +81,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   const scheduleInterval = 25; 
 
   // Deduplicate clips for the select dropdown to avoid key collision errors
-  const uniqueClips = Array.from(new Map(clips.map(c => [c.id, c])).values());
+  const uniqueClips = React.useMemo(() => {
+    return Array.from(new Map(clips.map(c => [c.id, c])).values());
+  }, [clips]);
 
   const initAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
@@ -156,7 +155,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       source.buffer = buffer;
       source.playbackRate.value = playbackRate;
       panNode.pan.value = settings.pan;
-      filterNode.frequency.frequency.setValueAtTime(200 + (Math.pow(settings.cutoff, 2) * 19800), scheduledTime || ctx.currentTime);
+      
+      // FIXED: Corrected access to filterNode.frequency
+      filterNode.frequency.setValueAtTime(200 + (Math.pow(settings.cutoff, 2) * 19800), scheduledTime || ctx.currentTime);
 
       const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
       const duration = (buffer.duration * (settings.trimEnd - settings.trimStart)) / playbackRate;
@@ -233,7 +234,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     }
     const newGrid: Record<string, string[]> = { ...grid };
     for (let c = 0; c < numChannels; c++) {
-      const clipId = selectedClipsForChannel[c.toString()] || (clips.length > 0 ? clips[Math.floor(Math.random() * clips.length)].id : "");
+      const clipId = selectedClipsForChannel[c.toString()] || (uniqueClips.length > 0 ? uniqueClips[Math.floor(Math.random() * uniqueClips.length)].id : "");
       if (!clipId) continue;
       for (let s = 0; s < numSteps; s++) {
         if (Math.random() > 0.8) newGrid[`${c}-${s}`] = [clipId];
