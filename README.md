@@ -1,4 +1,3 @@
-
 # 🎧 DROP IT | Rhythm & Voice Studio
 
 Welcome to **Drop It**. This is a functional, browser-based workstation designed for high-performance rhythm creation and audio manipulation using the Web Audio API.

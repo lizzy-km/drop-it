@@ -80,7 +80,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   const lookAheadTime = 0.1; 
   const scheduleInterval = 25; 
 
-  // Deduplicate clips for the select dropdown to avoid key collision errors
   const uniqueClips = React.useMemo(() => {
     return Array.from(new Map(clips.map(c => [c.id, c])).values());
   }, [clips]);
@@ -156,7 +155,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       source.playbackRate.value = playbackRate;
       panNode.pan.value = settings.pan;
       
-      // FIXED: Corrected access to filterNode.frequency
       filterNode.frequency.setValueAtTime(200 + (Math.pow(settings.cutoff, 2) * 19800), scheduledTime || ctx.currentTime);
 
       const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
@@ -228,7 +226,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   }, [isPlaying, scheduleNextNote, initAudioContext]);
 
   const randomizePattern = () => {
-    if (clips.length === 0) {
+    if (uniqueClips.length === 0) {
       toast({ title: "No Samples Found", description: "Please record or upload sounds first." });
       return;
     }

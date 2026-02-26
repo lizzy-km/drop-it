@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState, Suspense } from 'react';
@@ -7,7 +6,7 @@ import { VoiceRecorder } from '@/components/studio/voice-recorder';
 import { AudioUploader } from '@/components/studio/audio-uploader';
 import { RhythmGrid } from '@/components/studio/rhythm-grid';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, Library, Trash2, LayoutDashboard, Zap, Settings2, Loader2 } from 'lucide-react';
+import { ChevronLeft, Library, Trash2, LayoutDashboard, Settings2, Loader2 } from 'lucide-react';
 import ReactLink from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { CHARACTER_TYPES } from '@/components/character-icons';
@@ -84,7 +83,7 @@ function StudioContent() {
              <h2 className="text-xl font-black tracking-tighter leading-none text-primary uppercase">{user.name.toUpperCase()}_SESSION</h2>
              <div className="flex items-center gap-2 mt-1">
                 <span className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
-                <span className="text-[8px] font-black uppercase tracking-[0.3em] text-muted-foreground">Recording Active</span>
+                <span className="text-[8px] font-black uppercase tracking-[0.3em] text-muted-foreground">Session Active</span>
              </div>
           </div>
           <div className="flex items-center gap-4 border-l border-white/5 pl-10">
@@ -230,7 +229,7 @@ function StudioContent() {
              <div className="glass-panel p-10 rounded-[3rem] space-y-6 gold-border">
                 <div className="flex items-center gap-4 text-primary">
                   <LayoutDashboard className="w-6 h-6" />
-                  <span className="font-black text-xs uppercase tracking-[0.3em]">STUDIO_METRICS</span>
+                  <span className="font-black text-xs uppercase tracking-[0.3em] uppercase">STUDIO_METRICS</span>
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                   <div className="bg-black/40 p-6 rounded-[2rem] text-center gold-border">
