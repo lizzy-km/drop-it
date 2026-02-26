@@ -651,6 +651,30 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                                   </div>
                                 </div>
                               </div>
+                              {/* Spatial Field */}
+                              <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
+                                <div className="absolute top-0 right-0 p-4">
+                                  <ArrowRightLeft className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
+                                </div>
+                                <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Spatial_Field</h4>
+                                <div className="space-y-6">
+                                  <div className="space-y-3">
+                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                      <span>Panning</span>
+                                      <span className="text-primary">{s.pan.toFixed(2)}</span>
+                                    </div>
+                                    <Slider value={[s.pan * 50 + 50]} min={0} max={100} onValueChange={(v) => updateChannelSetting(chKey, 'pan', (v[0] - 50) / 50)} />
+                                  </div>
+                                  <div className="space-y-3">
+                                    <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
+                                      <span>Delay_Send</span>
+                                      <span className="text-primary">{Math.round(s.delay * 100)}%</span>
+                                    </div>
+                                    <Slider value={[s.delay * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'delay', v[0] / 100)} />
+                                  </div>
+
+                                </div>
+                              </div>
                             </div>
                           </DialogContent>
                         </Dialog>
