@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Save, RotateCcw, Disc, Cross } from 'lucide-react';
+import { Mic, Square, Save, RotateCcw, Disc, Cross, PlusIcon, SidebarCloseIcon } from 'lucide-react';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
 import { db, User } from '@/lib/db';
@@ -98,7 +98,7 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
               </Button>
               
                <Button className="flex-1 h-14 rounded-full font-black uppercase tracking-widest bg-destructive text-black hover:bg-primary/90 shadow-xl" onClick={saveClip}>
-                <Cross className="w-4 h-4 mr-2" /> Cancel
+                Cancel
               </Button>
             </div>
           </div>
