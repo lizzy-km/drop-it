@@ -25,6 +25,7 @@ interface ChannelSettingsDialogProps {
   channelIdx: number;
   settings: ChannelSettings;
   onUpdate: (key: keyof ChannelSettings, val: any) => void;
+  onBatchUpdate: (settings: Partial<ChannelSettings>) => void;
   onAudition: () => void;
 }
 
@@ -32,20 +33,22 @@ const FACTORY_PRESETS: Record<string, Partial<ChannelSettings>> = {
   PUNCHY_KICK: {
     ampAttack: 0.01, ampDecay: 0.1, ampSustain: 0, ampRelease: 0.05,
     svfCut: 0.1, svfEmph: 0.2, svfType: 'lowpass', limiterPre: 1.2,
-    svfActive: true, ampActive: true, fxActive: true, oscActive: true
+    svfActive: true, ampActive: true, fxActive: true, oscActive: true,
+    volume: 0.9, pitch: 1.0
   },
   VAPOR_CHORD: {
     ampAttack: 1.2, ampDecay: 0.8, ampSustain: 0.7, ampRelease: 1.5,
     svfCut: 0.4, svfEmph: 0.6, svfType: 'bandpass', lfoRate: 0.3, oscLfo: 0.2,
-    svfActive: true, ampActive: true, lfoActive: true, oscActive: true
+    svfActive: true, ampActive: true, lfoActive: true, oscActive: true,
+    volume: 0.7
   },
   INDUSTRIAL_HIT: {
     distortion: 0.8, ampRelease: 0.1, svfCut: 0.8, svfEmph: 0.9, limiterPre: 1.5,
-    fxActive: true, svfActive: true, oscActive: true
+    fxActive: true, svfActive: true, oscActive: true, volume: 1.0
   }
 };
 
-export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAudition }: ChannelSettingsDialogProps) {
+export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBatchUpdate, onAudition }: ChannelSettingsDialogProps) {
   const [userPresets, setUserPresets] = useState<Preset[]>([]);
   const [newPresetName, setNewPresetName] = useState('');
   const [showSaveInput, setShowSaveInput] = useState(false);
@@ -55,17 +58,15 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
   }, []);
 
   const applyPreset = (presetSettings: Partial<ChannelSettings>) => {
-    Object.entries(presetSettings).forEach(([key, val]) => {
-      // Ensure we only update valid keys
-      if (key in s) {
-        onUpdate(key as keyof ChannelSettings, val);
-      }
-    });
+    onBatchUpdate(presetSettings);
     toast({ title: "Signal Profile Applied" });
   };
 
   const handleSavePreset = () => {
-    if (!newPresetName.trim()) return;
+    if (!newPresetName.trim()) {
+      toast({ title: "Identification Required", description: "Name your signal profile before saving.", variant: "destructive" });
+      return;
+    }
     const newPreset: Preset = {
       id: crypto.randomUUID(),
       name: newPresetName.toUpperCase(),
@@ -79,20 +80,27 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
   };
 
   const handleExportPresetFile = () => {
-    const data = {
-      type: "DROPIT_PRESET",
-      version: "1.0",
-      name: newPresetName || `CHANNEL_${channelIdx}_CONFIG`,
-      settings: s
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(newPresetName || `preset_ch_${channelIdx}`).toLowerCase()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: "Config Exported to Disk" });
+    try {
+      const data = {
+        type: "DROPIT_PRESET",
+        version: "1.0",
+        name: newPresetName || `CHANNEL_${channelIdx}_CONFIG`,
+        settings: s
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `${(newPresetName || `preset_ch_${channelIdx}`).toLowerCase().replace(/\s+/g, '_')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast({ title: "Config Exported to Disk" });
+    } catch (err) {
+      toast({ title: "Export Failed", variant: "destructive" });
+    }
   };
 
   const handleImportPresetFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,6 +118,8 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
       }
     };
     reader.readAsText(file);
+    // Reset input
+    e.target.value = '';
   };
 
   const deleteUserPreset = (id: string, e: React.MouseEvent) => {
@@ -177,12 +187,12 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                ) : (
                  <div className="flex items-center gap-2">
                     <Button onClick={() => setShowSaveInput(true)} variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
-                      <Save className="w-4 h-4 mr-2" /> Preset_Lab
+                      <Save className="w-4 h-4 mr-2" /> Save_Profile
                     </Button>
                     <div className="relative">
                       <input type="file" accept=".json" onChange={handleImportPresetFile} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
                       <Button variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
-                        <FileUp className="w-4 h-4 mr-2" /> Import_Disk
+                        <FileUp className="w-4 h-4 mr-2" /> Load_Disk
                       </Button>
                     </div>
                  </div>
@@ -191,7 +201,7 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
-                    <Wand2 className="w-4 h-4 mr-2" /> Load_Library
+                    <Library className="w-4 h-4 mr-2" /> Preset_Library
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="glass-panel border-primary/20 rounded-2xl min-w-[240px] max-h-[400px] overflow-y-auto">
@@ -228,7 +238,7 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                 </DropdownMenuContent>
               </DropdownMenu>
               <div className="px-5 py-2 rounded-full bg-black/40 border border-primary/10 text-[10px] font-black text-primary/40 uppercase tracking-[0.3em]">
-                Channel_{channelIdx}
+                CH_{channelIdx}
               </div>
             </div>
           </div>
@@ -245,8 +255,8 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                   !s[`${tab}Active` as keyof ChannelSettings] && "opacity-50"
                 )}
               >
-                {tab === 'fx' ? 'FX/LMT' : tab.toUpperCase()}
-                {!s[`${tab}Active` as keyof ChannelSettings] && <Power className="w-3 h-3 text-red-500" />}
+                {tab === 'fx' ? 'FX_LMT' : tab.toUpperCase()}
+                {!s[`${tab}Active` as keyof ChannelSettings] && <ZapOff className="w-3 h-3 text-red-500" />}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -255,23 +265,23 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
             <div className="md:col-span-8">
               <TabsContent value="osc" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
                  <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.oscActive && "opacity-30")}>
-                    <SectionHeader title="OSCILLATOR_SOURCE" icon={Radio} activeKey="oscActive" description="Sample_Playback_Engine" />
+                    <SectionHeader title="OSCILLATOR_SOURCE" icon={Radio} activeKey="oscActive" description="Sample_Engine" />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-12">
                        <div className="space-y-6">
                           <div className="space-y-4">
-                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Coarse_Tune (Semi)</Label>
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Coarse_Tune</Label>
                              <Slider disabled={!s.oscActive} value={[s.oscCoarse || 0]} min={-24} max={24} step={1} onValueChange={(v) => onUpdate('oscCoarse', v[0])} />
                              <div className="text-[10px] font-black text-primary text-right">{((s.oscCoarse || 0) > 0) ? `+${s.oscCoarse}` : (s.oscCoarse || 0)} ST</div>
                           </div>
                           <div className="space-y-4">
-                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Fine_Tune (Cents)</Label>
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Fine_Tune</Label>
                              <Slider disabled={!s.oscActive} value={[s.oscFine || 0]} min={-100} max={100} step={1} onValueChange={(v) => onUpdate('oscFine', v[0])} />
                              <div className="text-[10px] font-black text-primary text-right">{((s.oscFine || 0) > 0) ? `+${s.oscFine}` : (s.oscFine || 0)} C</div>
                           </div>
                        </div>
                        <div className="space-y-8">
                           <div className="space-y-4">
-                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">PW / Phase_Width</Label>
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Phase_Width</Label>
                              <Slider disabled={!s.oscActive} value={[(s.oscPw || 0) * 100]} onValueChange={(v) => onUpdate('oscPw', v[0] / 100)} />
                           </div>
                           <div className="grid grid-cols-2 gap-4">
@@ -291,21 +301,21 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
 
               <TabsContent value="amp" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
                 <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.ampActive && "opacity-30")}>
-                   <SectionHeader title="AMPLIFIER_AHDSR" icon={Waves} activeKey="ampActive" description="Output_Gain_Envelope" />
+                   <SectionHeader title="AMPLIFIER_AHDSR" icon={Waves} activeKey="ampActive" description="Output_Envelope" />
                    
-                   <div className="grid grid-cols-1 gap-10">
+                   <div className="grid grid-cols-1 gap-8">
                       {['Attack', 'Decay', 'Sustain', 'Release'].map((stage) => {
                         const key = `amp${stage}` as keyof ChannelSettings;
                         const val = (s as any)[key] || 0;
                         return (
-                          <div key={stage} className="space-y-4">
+                          <div key={stage} className="space-y-3">
                             <div className="flex justify-between items-center px-1">
                               <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{stage}</Label>
-                              <span className="text-[10px] font-black text-primary">{val.toFixed(2)}s</span>
+                              <span className="text-[10px] font-black text-primary">{(val || 0).toFixed(2)}s</span>
                             </div>
                             <Slider 
                               disabled={!s.ampActive}
-                              value={[val * 100]} 
+                              value={[(val || 0) * 100]} 
                               max={stage === 'Sustain' ? 100 : 300} 
                               onValueChange={(v) => onUpdate(key, v[0] / 100)} 
                             />
@@ -322,7 +332,7 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
 
               <TabsContent value="svf" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
                  <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.svfActive && "opacity-30")}>
-                    <SectionHeader title="STATE_VARIABLE_FILTER" icon={Activity} activeKey="svfActive" description="Acoustic_Sculpting" />
+                    <SectionHeader title="STATE_VARIABLE_FILTER" icon={Activity} activeKey="svfActive" description="Acoustic_Model" />
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                        <div className="space-y-8">
@@ -333,7 +343,7 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                                 <Slider disabled={!s.svfActive} value={[(s.svfCut || 1) * 100]} onValueChange={(v) => onUpdate('svfCut', v[0] / 100)} />
                              </div>
                              <div className="space-y-4">
-                                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Emph (Res)</Label>
+                                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Resonance</Label>
                                 <Slider disabled={!s.svfActive} value={[(s.svfEmph || 0.2) * 100]} onValueChange={(v) => onUpdate('svfEmph', v[0] / 100)} />
                              </div>
                           </div>
@@ -359,7 +369,7 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                                 <Slider disabled={!s.svfActive} value={[(s.svfEnv || 0) * 100]} onValueChange={(v) => onUpdate('svfEnv', v[0] / 100)} />
                              </div>
                              <div className="space-y-4">
-                                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">KB_Tracking</Label>
+                                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">KB_Track</Label>
                                 <Slider disabled={!s.svfActive} value={[(s.svfKb || 0) * 100]} onValueChange={(v) => onUpdate('svfKb', v[0] / 100)} />
                              </div>
                           </div>
@@ -370,21 +380,21 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
 
               <TabsContent value="lfo" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
                  <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.lfoActive && "opacity-30")}>
-                    <SectionHeader title="MODULATION_LFO" icon={Zap} activeKey="lfoActive" description="Low_Frequency_Modulator" />
+                    <SectionHeader title="MODULATION_LFO" icon={Zap} activeKey="lfoActive" description="Signal_Mod" />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-12">
                        <div className="space-y-8">
                           <div className="space-y-4">
-                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Rate (Freq)</Label>
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Rate</Label>
                              <Slider disabled={!s.lfoActive} value={[(s.lfoRate || 1) * 100]} max={2000} onValueChange={(v) => onUpdate('lfoRate', v[0] / 100)} />
                              <div className="text-[10px] font-black text-primary text-right">{((s.lfoRate || 1) * 10).toFixed(1)} Hz</div>
                           </div>
                           <div className="space-y-4">
-                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Delay (Fade)</Label>
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Delay</Label>
                              <Slider disabled={!s.lfoActive} value={[(s.lfoDelay || 0) * 100]} onValueChange={(v) => onUpdate('lfoDelay', v[0] / 100)} />
                           </div>
                        </div>
-                       <div className="bg-white/5 p-8 rounded-3xl border border-white/5 space-y-4">
-                          <Label className="text-[9px] font-black uppercase tracking-widest text-primary">Routing_Matrix</Label>
+                       <div className="bg-white/5 p-8 rounded-3xl border border-white/5">
+                          <Label className="text-[8px] font-black uppercase tracking-[0.3em] text-primary/40 block mb-4">WAVEFORM_MONITOR</Label>
                           {s.lfoActive && <VisualLFO rate={s.lfoRate} delay={s.lfoDelay} />}
                        </div>
                     </div>
@@ -394,14 +404,14 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
               <TabsContent value="fx" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
                  <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 grid grid-cols-2 gap-12 transition-opacity", !s.fxActive && "opacity-30")}>
                     <div className="space-y-8">
-                       <SectionHeader title="FX_CHAIN" icon={Layers} activeKey="fxActive" description="Harmonic_Saturation" />
+                       <SectionHeader title="FX_CHAIN" icon={Layers} activeKey="fxActive" description="Harmonic_Chain" />
                        <div className="space-y-6">
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Unison_Spread</Label>
                              <Slider disabled={!s.fxActive} value={[(s.unison || 0) * 100]} onValueChange={(v) => onUpdate('unison', v[0] / 100)} />
                           </div>
                           <div className="space-y-4">
-                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Harmonic_Dist</Label>
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Distortion</Label>
                              <Slider disabled={!s.fxActive} value={[(s.distortion || 0) * 100]} onValueChange={(v) => onUpdate('distortion', v[0] / 100)} />
                           </div>
                        </div>
@@ -429,16 +439,16 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                <div className="glass-panel p-8 rounded-[2.5rem] space-y-8 bg-black/60 gold-border">
                   <div className="flex items-center gap-3 text-primary">
                     <Settings2 className="w-5 h-5" />
-                    <span className="font-black text-[10px] tracking-[0.3em] uppercase">SIGNAL_MONITOR</span>
+                    <span className="font-black text-[10px] tracking-[0.3em] uppercase">MONITORING</span>
                   </div>
                   
                   <div className="space-y-4">
                     <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex justify-between items-center">
-                       <span className="text-[9px] font-black text-muted-foreground uppercase">Output_Level</span>
-                       <span className="text-[10px] font-black text-primary">{Math.round((s.volume || 0) * 100)}%</span>
+                       <span className="text-[9px] font-black text-muted-foreground uppercase">Out_Level</span>
+                       <span className="text-[10px] font-black text-primary">{Math.round((s.volume || 0.8) * 100)}%</span>
                     </div>
                     <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex justify-between items-center">
-                       <span className="text-[9px] font-black text-muted-foreground uppercase">Sample_Rate</span>
+                       <span className="text-[9px] font-black text-muted-foreground uppercase">Engine_Clock</span>
                        <span className="text-[10px] font-black text-primary">44.1 KHZ</span>
                     </div>
                   </div>
@@ -447,13 +457,13 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                     className="w-full h-20 rounded-[2rem] bg-primary text-black font-black uppercase tracking-[0.4em] text-xs hover:bg-primary/90 shadow-2xl transition-all hover:scale-[1.02] active:scale-95"
                     onClick={onAudition}
                   >
-                    <Play className="w-6 h-6 mr-4 fill-current" /> AUDITION_SIGNAL
+                    <Play className="w-6 h-6 mr-4 fill-current" /> AUDITION
                   </Button>
                </div>
                
                <div className="bg-white/5 p-8 rounded-[2.5rem] border border-white/5">
-                  <p className="text-[9px] font-bold text-muted-foreground/60 leading-relaxed uppercase tracking-widest">
-                    Adjusting these parameters modulates the internal Web Audio node graph. Inactive (bypassed) modules do not consume additional processing overhead.
+                  <p className="text-[9px] font-bold text-muted-foreground/40 leading-relaxed uppercase tracking-widest">
+                    Acoustic parameters are modulated via Web Audio nodes. Bypass inactive modules to reduce studio overhead.
                   </p>
                </div>
             </div>
@@ -463,12 +473,13 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
         <DialogFooter className="pt-8 border-t border-white/10 mt-4">
           <Button 
             className="w-full h-14 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.4em] hover:bg-primary hover:text-black transition-all"
-            onClick={() => toast({ title: "Signal Committed to Studio" })}
+            onClick={() => toast({ title: "Signal Committed" })}
           >
-            Apply_Acoustic_Model
+            Apply_Signal_Chain
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+

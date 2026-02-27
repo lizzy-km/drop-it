@@ -357,6 +357,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     setChannelSettings(p => ({ ...p, [idx]: { ...p[idx], [key]: val } }));
   };
 
+  const batchUpdateChannelSetting = (idx: string, settings: Partial<ChannelSettings>) => {
+    setChannelSettings(p => ({ ...p, [idx]: { ...p[idx], ...settings } }));
+  };
+
   const handleSave = () => {
     const newTrack: Track = {
       id: track?.id || crypto.randomUUID(),
@@ -372,7 +376,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     };
     db.saveTrack(newTrack);
     onSaveTrack(newTrack);
-    toast({ title: "Session Committed", description: "Acoustic model saved to studio database." });
+    toast({ title: "Session Committed" });
   };
 
   const handleExportConfig = () => {
@@ -394,11 +398,14 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+    a.style.display = 'none';
     a.href = url;
     a.download = `${title.replace(/\s+/g, '_')}_Config.json`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: "Config Exported" });
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    toast({ title: "Project Config Exported" });
   };
 
   const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -436,6 +443,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleExportAudio = async () => {
@@ -461,10 +469,13 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       const wavBlob = audioBufferToWav(renderedBuffer);
       const url = URL.createObjectURL(wavBlob);
       const a = document.createElement('a');
+      a.style.display = 'none';
       a.href = url;
       a.download = `${title.replace(/\s+/g, '_')}_Master.wav`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     } catch (err) {
       console.error(err);
       toast({ title: "Export Error", variant: "destructive" });
@@ -590,6 +601,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                       channelIdx={chIdx} 
                       settings={s} 
                       onUpdate={(key, val) => updateChannelSetting(chKey, key, val)}
+                      onBatchUpdate={(settings) => batchUpdateChannelSetting(chKey, settings)}
                       onAudition={() => { if (selId) playClip(selId, chKey); }}
                     />
                   </div>
@@ -658,3 +670,4 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     </div>
   );
 }
+
