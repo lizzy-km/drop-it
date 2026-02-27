@@ -58,7 +58,17 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
   }, []);
 
   const applyPreset = (presetSettings: Partial<ChannelSettings>) => {
-    onBatchUpdate(presetSettings);
+    // Sanitize values to prevent NaN issues
+    const sanitized: Partial<ChannelSettings> = {};
+    Object.keys(presetSettings).forEach(key => {
+      const val = (presetSettings as any)[key];
+      if (typeof val === 'number') {
+        sanitized[key as keyof ChannelSettings] = isNaN(val) ? 0 : val;
+      } else {
+        sanitized[key as keyof ChannelSettings] = val;
+      }
+    });
+    onBatchUpdate(sanitized);
     toast({ title: "Signal Profile Applied" });
   };
 
@@ -81,24 +91,38 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
 
   const handleExportPresetFile = () => {
     try {
+      // Create a clean copy of settings for export
+      const sanitizedSettings = { ...s };
+      
       const data = {
         type: "DROPIT_PRESET",
         version: "1.0",
         name: newPresetName || `CHANNEL_${channelIdx}_CONFIG`,
-        settings: s
+        settings: sanitizedSettings
       };
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      
+      const jsonString = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
+      
+      const fileName = `${(newPresetName || `preset_ch_${channelIdx}`).toLowerCase().replace(/\s+/g, '_')}.json`;
+      
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
-      a.download = `${(newPresetName || `preset_ch_${channelIdx}`).toLowerCase().replace(/\s+/g, '_')}.json`;
+      a.download = fileName;
+      
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      toast({ title: "Config Exported to Disk" });
+      
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 0);
+      
+      toast({ title: "Config Exported to Disk", description: `Saved as ${fileName}` });
     } catch (err) {
+      console.error("Export Error:", err);
       toast({ title: "Export Failed", variant: "destructive" });
     }
   };
@@ -106,19 +130,28 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
   const handleImportPresetFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
-        if (data.type !== "DROPIT_PRESET") throw new Error("Invalid Format");
+        if (data.type !== "DROPIT_PRESET") {
+           // Try to fallback if it looks like a raw settings object
+           if (data.volume !== undefined || data.oscActive !== undefined) {
+             applyPreset(data);
+             toast({ title: "Raw Config Loaded" });
+             return;
+           }
+           throw new Error("Invalid Format");
+        }
         applyPreset(data.settings);
-        toast({ title: "Disk Config Loaded" });
+        toast({ title: "Disk Config Loaded", description: data.name || "Unnamed Preset" });
       } catch (err) {
+        console.error("Import Error:", err);
         toast({ title: "Import Error", description: "Unsupported config schema.", variant: "destructive" });
       }
     };
     reader.readAsText(file);
-    // Reset input
     e.target.value = '';
   };
 
@@ -177,7 +210,7 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
                         <Save className="w-3.5 h-3.5 mr-2" /> Save
                       </Button>
                       <Button onClick={handleExportPresetFile} variant="outline" className="border-primary/20 bg-black/40 h-12 rounded-xl font-black uppercase text-[10px] tracking-widest px-4 text-primary">
-                        <FileDown className="w-3.5 h-3.5 mr-2" /> Disk
+                        <FileDown className="w-3.5 h-3.5 mr-2" /> Export
                       </Button>
                     </div>
                     <Button variant="ghost" onClick={() => setShowSaveInput(false)} className="text-muted-foreground h-12">
@@ -187,12 +220,12 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
                ) : (
                  <div className="flex items-center gap-2">
                     <Button onClick={() => setShowSaveInput(true)} variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
-                      <Save className="w-4 h-4 mr-2" /> Save_Profile
+                      <Save className="w-4 h-4 mr-2" /> Preset_Lab
                     </Button>
                     <div className="relative">
                       <input type="file" accept=".json" onChange={handleImportPresetFile} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
                       <Button variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
-                        <FileUp className="w-4 h-4 mr-2" /> Load_Disk
+                        <FileUp className="w-4 h-4 mr-2" /> Load_Config
                       </Button>
                     </div>
                  </div>
@@ -482,4 +515,3 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
     </Dialog>
   );
 }
-
