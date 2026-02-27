@@ -490,14 +490,28 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         <div className="absolute inset-0 studio-grid-bg opacity-10" />
         <div className="flex w-full flex-col lg:flex-row items-center justify-between gap-12 relative z-10">
           <div className="flex-1 space-y-6 w-full">
-            <input
+            <div className=' flex gap-3 ' >
+                <input
               value={title}
               onChange={(e) => setTitle(e.target.value.toUpperCase())}
               className="text-3xl font-black italic tracking-tighter bg-transparent border-none focus:ring-0 w-full outline-none text-primary"
               placeholder="PROJECT_TITLE"
             />
+             <div className="flex gap-3">
+              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleSave} title="Save to Database"><Save className="w-5 h-5" /></Button>
+              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleExportConfig} title="Export Project JSON"><DownloadCloud className="w-5 h-5" /></Button>
+              <div className="relative">
+                <input type="file" accept=".json" onChange={handleImportConfig} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" title="Import Project JSON"><Upload className="w-5 h-5" /></Button>
+              </div>
+              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-primary/20 text-primary" onClick={handleExportAudio} disabled={isExporting} title="Render Master WAV">
+                {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+              </Button>
+            </div>
+            </div>
+          
             <div className="flex flex-col md:flex-row items-center gap-8">
-              <div className="flex items-center gap-4 h-[60px] rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full bg-black/20">
+              <div className="flex items-center gap-4 h-full rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full bg-black/20">
                 <MasterVisualizer analyser={masterAnalyserRef.current} />
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={randomizePattern} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary border border-primary/10 gap-2">
@@ -510,7 +524,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
           </div>
 
           <div className="flex items-center gap-10">
-            <div className="flex flex-col items-center gap-4 min-w-[160px]">
+            <div className="flex flex-col items-center gap-4 w-[80px]">
               <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">BPM</span>
               <div className="flex flex-col gap-3 w-full">
                 <input
@@ -539,7 +553,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                 />
               </div>
             </div>
-            <div className="flex flex-col items-center gap-4 min-w-[160px]">
+            <div className="flex flex-col items-center gap-4 w-[80px]">
               <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Steps</span>
               <div className="flex flex-col gap-3 w-full">
                 <input
@@ -575,17 +589,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
             >
               {isPlaying ? <Square className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
             </Button>
-            <div className="flex flex-col gap-3">
-              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleSave} title="Save to Database"><Save className="w-5 h-5" /></Button>
-              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleExportConfig} title="Export Project JSON"><DownloadCloud className="w-5 h-5" /></Button>
-              <div className="relative">
-                <input type="file" accept=".json" onChange={handleImportConfig} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
-                <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" title="Import Project JSON"><Upload className="w-5 h-5" /></Button>
-              </div>
-              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-primary/20 text-primary" onClick={handleExportAudio} disabled={isExporting} title="Render Master WAV">
-                {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-              </Button>
-            </div>
+           
           </div>
         </div>
       </div>
