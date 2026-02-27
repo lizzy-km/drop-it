@@ -509,38 +509,64 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
-            <div className="flex flex-col items-center gap-2">
+          <div className="flex items-center gap-10">
+            <div className="flex flex-col items-center gap-4 min-w-[140px]">
               <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">BPM</span>
-              <input
-                type="text"
-                value={bpmInput}
-                onChange={(e) => setBpmInput(e.target.value)}
-                onBlur={() => {
-                  let val = parseInt(bpmInput);
-                  if (isNaN(val) || val < 60) val = 60;
-                  else if (val > 240) val = 240;
-                  setBpm(val);
-                  setBpmInput(val.toString());
-                }}
-                className="bg-black/40 w-24 px-4 py-4 rounded-2xl border border-white/5 font-black text-2xl text-primary text-center outline-none"
-              />
+              <div className="flex flex-col gap-3 w-full">
+                <input
+                  type="text"
+                  value={bpmInput}
+                  onChange={(e) => setBpmInput(e.target.value)}
+                  onBlur={() => {
+                    let val = parseInt(bpmInput);
+                    if (isNaN(val) || val < 60) val = 60;
+                    else if (val > 240) val = 240;
+                    setBpm(val);
+                    setBpmInput(val.toString());
+                  }}
+                  className="bg-black/40 w-full px-4 py-4 rounded-2xl border border-white/5 font-black text-2xl text-primary text-center outline-none"
+                />
+                <Slider 
+                  value={[bpm]} 
+                  min={60} 
+                  max={240} 
+                  step={1} 
+                  onValueChange={(v) => {
+                    setBpm(v[0]);
+                    setBpmInput(v[0].toString());
+                  }}
+                  className="w-full"
+                />
+              </div>
             </div>
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-col items-center gap-4 min-w-[140px]">
               <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Steps</span>
-              <input
-                type="text"
-                value={numStepsInput}
-                onChange={(e) => setNumStepsInput(e.target.value)}
-                onBlur={() => {
-                  let val = parseInt(numStepsInput);
-                  if (isNaN(val) || val < 4) val = 4;
-                  else if (val > MAX_STEPS) val = MAX_STEPS;
-                  setNumSteps(val);
-                  setNumStepsInput(val.toString());
-                }}
-                className="bg-black/40 w-24 px-4 py-4 rounded-2xl border border-white/5 font-black text-2xl text-primary text-center outline-none"
-              />
+              <div className="flex flex-col gap-3 w-full">
+                <input
+                  type="text"
+                  value={numStepsInput}
+                  onChange={(e) => setNumStepsInput(e.target.value)}
+                  onBlur={() => {
+                    let val = parseInt(numStepsInput);
+                    if (isNaN(val) || val < 4) val = 4;
+                    else if (val > MAX_STEPS) val = MAX_STEPS;
+                    setNumSteps(val);
+                    setNumStepsInput(val.toString());
+                  }}
+                  className="bg-black/40 w-full px-4 py-4 rounded-2xl border border-white/5 font-black text-2xl text-primary text-center outline-none"
+                />
+                <Slider 
+                  value={[numSteps]} 
+                  min={4} 
+                  max={MAX_STEPS} 
+                  step={4} 
+                  onValueChange={(v) => {
+                    setNumSteps(v[0]);
+                    setNumStepsInput(v[0].toString());
+                  }}
+                  className="w-full"
+                />
+              </div>
             </div>
             <Button
               variant={isPlaying ? "destructive" : "default"}
@@ -670,4 +696,3 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     </div>
   );
 }
-
