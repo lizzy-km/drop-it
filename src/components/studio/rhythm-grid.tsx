@@ -21,9 +21,9 @@ import { makeDistortionCurve, audioBufferToWav } from '@/lib/audio-utils';
 import { MasterVisualizer } from './visualizers';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { ChannelSettingsDialog } from './channel-settings-dialog';
+import StudioHeader from './Header';
 
 const DEFAULT_CHANNELS = 4;
-const MAX_STEPS = 64;
 
 const CHANNEL_COLORS = [
   { name: 'Gold', class: 'bg-primary', hex: '#facc15' },
@@ -45,7 +45,7 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   color: 'bg-primary',
   muted: false,
   reversed: false,
-  
+
   // Bypass Flags
   oscActive: true,
   svfActive: true,
@@ -108,27 +108,24 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   onImportRefresh?: () => void;
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
-  const [bpm, setBpm] = useState(track?.bpm || 120);
-  const [bpmInput, setBpmInput] = useState((track?.bpm || 120).toString());
   const [numSteps, setNumSteps] = useState(track?.numSteps || 16);
-  const [numStepsInput, setNumStepsInput] = useState((track?.numSteps || 16).toString());
+  const [bpm, setBpm] = useState(track?.bpm || 120);
+
   const [numChannels, setNumChannels] = useState(track?.numChannels || DEFAULT_CHANNELS);
   const [grid, setGrid] = useState<Record<string, string[]>>(track?.grid || {});
-  const [title, setTitle] = useState(track?.title || 'NEW_PROJECT_01');
 
   const [channelSettings, setChannelSettings] = useState<Record<string, ChannelSettings>>(() => {
     const baseSettings: Record<string, ChannelSettings> = {};
     const count = Math.max(DEFAULT_CHANNELS, track?.numChannels || 0);
-    
+
     for (let i = 0; i < count; i++) {
       const key = i.toString();
       const existing = track?.channelSettings?.[key];
-      baseSettings[key] = { 
-        ...DEFAULT_CHANNEL_SETTINGS, 
+      baseSettings[key] = {
+        ...DEFAULT_CHANNEL_SETTINGS,
         ...existing,
-        color: existing?.color || CHANNEL_COLORS[i % CHANNEL_COLORS.length].class 
+        color: existing?.color || CHANNEL_COLORS[i % CHANNEL_COLORS.length].class
       };
     }
     return baseSettings;
@@ -217,7 +214,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       const coarseMult = Math.pow(2, (s.oscCoarse || 0) / 12);
       const fineMult = Math.pow(2, (s.oscFine || 0) / 1200);
       const basePlaybackRate = Math.max(0.001, pitch * coarseMult * fineMult);
-      
+
       const numVoices = (s.fxActive && unison > 0) ? 3 : 1;
       const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
       const trimStart = isNaN(s.trimStart) ? 0 : s.trimStart;
@@ -241,7 +238,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         const detuneAmount = (v === 0) ? 0 : (v === 1 ? unison * 0.1 : -unison * 0.1);
         source.buffer = buffer;
         source.playbackRate.setValueAtTime(Math.max(0.001, basePlaybackRate + detuneAmount), startTime);
-        
+
         const panValue = Math.max(-1, Math.min(1, (s.pan ?? 0) + (v === 1 ? 0.2 : v === 2 ? -0.2 : 0)));
         panNode.pan.setValueAtTime(panValue, startTime);
 
@@ -259,7 +256,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
 
         const peakGain = s.ampActive ? ((s.volume ?? 0.8) * (s.limiterPre ?? 1.0) * (s.ampLevel ?? 1.0)) : (s.volume ?? 0.8);
         const safePeakGain = isNaN(peakGain) ? 0.8 : Math.max(0.0001, peakGain);
-        
+
         if (s.ampActive) {
           gainNode.gain.setValueAtTime(0, startTime);
           gainNode.gain.linearRampToValueAtTime(safePeakGain, startTime + Math.max(0.001, s.ampAttack ?? 0.01));
@@ -278,7 +275,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         }
         distortionNode.connect(gainNode);
         gainNode.connect(panNode);
-        
+
         const destination = context ? context.destination : (masterAnalyserRef.current || ctx.destination);
         if (s.fxActive && (s.limiterMix ?? 0) > 0) {
           panNode.connect(limiterNode);
@@ -328,31 +325,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     return () => { if (schedulerTimerRef.current) clearInterval(schedulerTimerRef.current); };
   }, [isPlaying, scheduleNextNote, initAudioContext]);
 
-  const randomizePattern = () => {
-    const activeChannels = Object.keys(selectedClipsForChannel).filter(ch => !!selectedClipsForChannel[ch]);
-    if (activeChannels.length === 0) {
-      toast({ title: "No Tracks Assigned", description: "Assign sound clips to tracks before generating patterns.", variant: "destructive" });
-      return;
-    }
 
-    const newGrid: Record<string, string[]> = { ...grid };
-    activeChannels.forEach(ch => {
-      const clipId = selectedClipsForChannel[ch];
-      for (let s = 0; s < numSteps; s++) {
-        if (Math.random() > 0.85) {
-          newGrid[`${ch}-${s}`] = [clipId];
-        } else {
-           const key = `${ch}-${s}`;
-           if (newGrid[key]) {
-              newGrid[key] = newGrid[key].filter(id => id !== clipId);
-              if (newGrid[key].length === 0) delete newGrid[key];
-           }
-        }
-      }
-    });
-    setGrid(newGrid);
-    toast({ title: "Pattern Generated", description: `Rhythms manifested on ${activeChannels.length} active tracks.` });
-  };
 
   const updateChannelSetting = (idx: string, key: keyof ChannelSettings, val: any) => {
     setChannelSettings(p => ({ ...p, [idx]: { ...p[idx], [key]: val } }));
@@ -362,245 +335,16 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     setChannelSettings(p => ({ ...p, [idx]: { ...p[idx], ...settings } }));
   };
 
-  const handleSave = () => {
-    const newTrack: Track = {
-      id: track?.id || crypto.randomUUID(),
-      userId: user.id,
-      title,
-      bpm,
-      numChannels,
-      numSteps,
-      grid,
-      channelSettings,
-      selectedClips: selectedClipsForChannel,
-      createdAt: Date.now()
-    };
-    db.saveTrack(newTrack);
-    onSaveTrack(newTrack);
-    toast({ title: "Session Committed" });
-  };
 
-  const handleExportConfig = () => {
-    const currentTrack: Track = {
-      id: track?.id || crypto.randomUUID(),
-      userId: user.id,
-      title,
-      bpm,
-      numChannels,
-      numSteps,
-      grid,
-      channelSettings,
-      selectedClips: selectedClipsForChannel,
-      createdAt: Date.now()
-    };
-    const usedClipIds = new Set(Object.values(grid).flat());
-    const usedClips = clips.filter(c => usedClipIds.has(c.id));
-    const exportData = { type: "DROPIT_PROJECT", track: currentTrack, clips: usedClips };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = `${title.replace(/\s+/g, '_')}_Config.json`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-    toast({ title: "Project Config Exported" });
-  };
-
-  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = JSON.parse(event.target?.result as string);
-        if (data.type !== "DROPIT_PROJECT" && !data.patterns) throw new Error("Unsupported Format");
-        
-        if (data.clips) {
-           data.clips.forEach((clip: AudioClip) => db.saveClip({ ...clip, userId: user.id }));
-        }
-        
-        const importedTrack = { 
-          id: crypto.randomUUID(),
-          userId: user.id,
-          title: `IMPORTED_${data.track?.title || 'DAW_PATTERN'}`,
-          bpm: data.track?.bpm || data.bpm || 120,
-          numChannels: data.track?.numChannels || data.numChannels || 4,
-          numSteps: data.track?.numSteps || data.numSteps || 16,
-          grid: data.track?.grid || data.grid || {},
-          channelSettings: data.track?.channelSettings || data.channelSettings || {},
-          selectedClips: data.track?.selectedClips || data.selectedClips || {},
-          createdAt: Date.now()
-        };
-        
-        db.saveTrack(importedTrack);
-        toast({ title: "DAW Config Imported" });
-        if (onImportRefresh) onImportRefresh();
-        window.location.href = `/studio?id=${importedTrack.id}`;
-      } catch (err) {
-        toast({ title: "Import Failed", description: "Unknown config schema.", variant: "destructive" });
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  const handleExportAudio = async () => {
-    if (isExporting) return;
-    setIsExporting(true);
-    try {
-      const secondsPerBeat = 60.0 / bpm;
-      const secondsPerStep = secondsPerBeat / 4;
-      const totalDuration = numSteps * secondsPerStep;
-      const offlineCtx = new OfflineAudioContext(2, 44100 * totalDuration, 44100);
-      for (let s = 0; s < numSteps; s++) {
-        const timeOffset = s * secondsPerStep;
-        for (let c = 0; c < numChannels; c++) {
-          const clipIds = grid[`${c}-${s}`];
-          if (clipIds) {
-            for (const id of clipIds) {
-              await playClip(id, c.toString(), timeOffset, offlineCtx);
-            }
-          }
-        }
-      }
-      const renderedBuffer = await offlineCtx.startRendering();
-      const wavBlob = audioBufferToWav(renderedBuffer);
-      const url = URL.createObjectURL(wavBlob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = `${title.replace(/\s+/g, '_')}_Master.wav`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err) {
-      console.error(err);
-      toast({ title: "Export Error", variant: "destructive" });
-    } finally {
-      setIsExporting(false);
-    }
-  };
 
   return (
     <div className="space-y-12">
       <div className="glass-panel p-10 rounded-[3rem] gold-shadow relative overflow-hidden">
         <div className="absolute inset-0 studio-grid-bg opacity-10" />
-        <div className="flex w-full flex-col lg:flex-row items-end justify-between gap-12 relative z-10">
-          <div className="flex-1 space-y-6 w-full">
-            <div className=' flex gap-6 ' >
-              <div className=' flex justify-start items-center text-primary/60 border-r pr-6 border-primary/30 ' >
-                 
-               <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value.toUpperCase())}
-              className="text-3xl font-black italic tracking-tighter bg-transparent border-b border-primary/20 focus:ring-0 w-full outline-none text-primary"
-              placeholder="PROJECT_TITLE"
-            />
-            <Edit2Icon className="" />
-           
-              </div>
-               
-             <div className="flex gap-3">
-              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleSave} title="Save to Database"><Save className="w-5 h-5" /></Button>
-              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleExportConfig} title="Export Project JSON"><DownloadCloud className="w-5 h-5" /></Button>
-              <div className="relative">
-                <input type="file" accept=".json" onChange={handleImportConfig} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
-                <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" title="Import Project JSON"><Upload className="w-5 h-5" /></Button>
-              </div>
-              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-primary/20 text-primary" onClick={handleExportAudio} disabled={isExporting} title="Render Master WAV">
-                {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
-              </Button>
-            </div>
-            </div>
-          
-            <div className="flex flex-col md:flex-row items-center gap-8">
-              <div className="flex items-center gap-4 h-full rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full bg-black/20">
-                <MasterVisualizer analyser={masterAnalyserRef.current} />
-                <div className="flex flex-col gap-2">
-                  <Button variant="ghost" size="sm" onClick={randomizePattern} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary border border-primary/10 gap-2">
-                    <Dices className="w-3.5 h-3.5" /> Randomize
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setGrid({})} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-500 border border-red-500/20 gap-2"><X className="w-3.5 h-3.5" /> Clear</Button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center border-primary/30 border px-3 py-4 rounded-lg   gap-10 h-full ">
-            <div className="flex flex-col items-center gap-4 w-[80px]">
-              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">BPM</span>
-              <div className="flex flex-col gap-3 w-full">
-                <input
-                  type="text"
-                  value={bpmInput}
-                  onChange={(e) => setBpmInput(e.target.value)}
-                  onBlur={() => {
-                    let val = parseInt(bpmInput);
-                    if (isNaN(val) || val < 60) val = 60;
-                    else if (val > 240) val = 240;
-                    setBpm(val);
-                    setBpmInput(val.toString());
-                  }}
-                  className="bg-black/40 w-full px-4 py-4 rounded-2xl border border-white/5 font-black text-2xl text-primary text-center outline-none"
-                />
-                <Slider 
-                  value={[bpm]} 
-                  min={60} 
-                  max={240} 
-                  step={1} 
-                  onValueChange={(v) => {
-                    setBpm(v[0]);
-                    setBpmInput(v[0].toString());
-                  }}
-                  className="w-full"
-                />
-              </div>
-            </div>
-            <div className="flex flex-col items-center gap-4 w-[80px]">
-              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Steps</span>
-              <div className="flex flex-col gap-3 w-full">
-                <input
-                  type="text"
-                  value={numStepsInput}
-                  onChange={(e) => setNumStepsInput(e.target.value)}
-                  onBlur={() => {
-                    let val = parseInt(numStepsInput);
-                    if (isNaN(val) || val < 4) val = 4;
-                    else if (val > MAX_STEPS) val = MAX_STEPS;
-                    setNumSteps(val);
-                    setNumStepsInput(val.toString());
-                  }}
-                  className="bg-black/40 w-full px-4 py-4 rounded-2xl border border-white/5 font-black text-2xl text-primary text-center outline-none"
-                />
-                <Slider 
-                  value={[numSteps]} 
-                  min={4} 
-                  max={MAX_STEPS} 
-                  step={4} 
-                  onValueChange={(v) => {
-                    setNumSteps(v[0]);
-                    setNumStepsInput(v[0].toString());
-                  }}
-                  className="w-full"
-                />
-              </div>
-            </div>
-            <Button
-              variant={isPlaying ? "destructive" : "default"}
-              className={cn("w-[60] h-[60] rounded-[2.5rem] shadow-2xl transition-all", isPlaying ? "bg-red-500" : "bg-primary text-black")}
-              onClick={() => setIsPlaying(!isPlaying)}
-            >
-              {isPlaying ? <Square className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
-            </Button>
-           
-          </div>
-        </div>
+        <StudioHeader grid={grid} audioBufferToWav={audioBufferToWav} playClip={playClip} onImportRefresh={onImportRefresh} clips={clips} onSaveTrack={onSaveTrack} channelSettings={channelSettings} numChannels={numChannels} user={user} selectedClipsForChannel={selectedClipsForChannel} masterAnalyserRef={masterAnalyserRef} setGrid={setGrid} track={track} setNumSteps={setNumSteps} setBpm={setBpm} setIsPlaying={setIsPlaying} isPlaying={isPlaying} bpm={bpm} numSteps={numSteps} />
       </div>
 
+      {/* Studio Grid   */}
       <div className="glass-panel flex flex-col w-full rounded-[3rem] p-12 gold-shadow bg-black/40">
         <div className='w-full flex flex-col lg:flex-row' >
           <div className='lg:w-[35%] border-r border-white/5 flex flex-col p-4 ' >
@@ -634,9 +378,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                     <Button variant="ghost" size="icon" className={cn("h-10 w-10 rounded-xl", s.muted ? "text-red-500 bg-red-500/10" : "text-muted-foreground")} onClick={() => updateChannelSetting(chKey, 'muted', !s.muted)}>
                       {s.muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                     </Button>
-                    <ChannelSettingsDialog 
-                      channelIdx={chIdx} 
-                      settings={s} 
+                    <ChannelSettingsDialog
+                      channelIdx={chIdx}
+                      settings={s}
                       onUpdate={(key, val) => updateChannelSetting(chKey, key, val)}
                       onBatchUpdate={(settings) => batchUpdateChannelSetting(chKey, settings)}
                       onAudition={() => { if (selId) playClip(selId, chKey); }}
