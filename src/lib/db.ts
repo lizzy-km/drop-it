@@ -29,30 +29,53 @@ export interface ChannelSettings {
   muted: boolean;
   reversed: boolean;
   
-  // Advanced Effects
-  vibrato: number;
-  unison: number;
-  filterSeq: number;
-  
-  // Volume AHDSR
+  // OSC Lab
+  oscCoarse: number; // semitones -24 to 24
+  oscFine: number;   // cents -100 to 100
+  oscLevel: number;
+  oscLfo: number;    // pitch lfo depth
+  oscEnv: number;    // pitch env depth
+  oscPw: number;     // phase/width
+
+  // AMP Envelope (Amplifier)
+  ampAttack: number;
+  ampDecay: number;
+  ampSustain: number;
+  ampRelease: number;
+  ampLevel: number;
+
+  // SVF (State Variable Filter)
+  svfCut: number;
+  svfEmph: number;
+  svfEnv: number;
+  svfLfo: number;
+  svfKb: number;
+  svfType: 'lowpass' | 'highpass' | 'bandpass';
+  svfAttack: number;
+  svfDecay: number;
+  svfSustain: number;
+  svfRelease: number;
+
+  // LFO Lab
+  lfoRate: number;
+  lfoDelay: number;
+
+  // Legacy/Internal Mapping
   volAttack: number;
   volHold: number;
   volDecay: number;
   volSustain: number;
   volRelease: number;
   
-  // Filter AHDSR
   filterAttack: number;
   filterHold: number;
   filterDecay: number;
   filterSustain: number;
   filterRelease: number;
   
-  // Limiter
   limiterPre: number;
   limiterMix: number;
 
-  // Legacy (internal mapping)
   attack: number;
   release: number;
   trimStart: number;

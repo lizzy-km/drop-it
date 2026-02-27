@@ -15,12 +15,8 @@ import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { Slider } from '@/components/ui/slider';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { makeDistortionCurve, audioBufferToWav } from '@/lib/audio-utils';
-import { MasterVisualizer, VisualEnvelope, VisualTrim } from './visualizers';
+import { MasterVisualizer } from './visualizers';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { ChannelSettingsDialog } from './channel-settings-dialog';
 
@@ -48,25 +44,53 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   muted: false,
   reversed: false,
   
+  // OSC
+  oscCoarse: 0,
+  oscFine: 0,
+  oscLevel: 1.0,
+  oscLfo: 0,
+  oscEnv: 0,
+  oscPw: 0,
+
+  // AMP
+  ampAttack: 0.01,
+  ampDecay: 0.1,
+  ampSustain: 1.0,
+  ampRelease: 0.1,
+  ampLevel: 1.0,
+
+  // SVF
+  svfCut: 1.0,
+  svfEmph: 0.2,
+  svfEnv: 0,
+  svfLfo: 0,
+  svfKb: 0,
+  svfType: 'lowpass',
+  svfAttack: 0.01,
+  svfDecay: 0.1,
+  svfSustain: 0.5,
+  svfRelease: 0.1,
+
+  // LFO
+  lfoRate: 1.0,
+  lfoDelay: 0,
+
+  // Legacy
   vibrato: 0,
   unison: 0,
   filterSeq: 0,
-  
   volAttack: 0.01,
   volHold: 0,
   volDecay: 0.1,
   volSustain: 0.8,
   volRelease: 0.1,
-  
   filterAttack: 0.1,
   filterHold: 0,
   filterDecay: 0.1,
   filterSustain: 0.5,
   filterRelease: 0.1,
-  
   limiterPre: 0.8,
   limiterMix: 0,
-
   attack: 0.01,
   release: 0.1,
   trimStart: 0,
@@ -171,10 +195,15 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         buffer = reversedBuffersRef.current[clipId];
       }
 
-      // Unison Implementation (3 Voices)
       const numVoices = s.unison > 0 ? 3 : 1;
       const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
-      const duration = (buffer.duration * (s.trimEnd - s.trimStart)) / s.pitch;
+      
+      // Calculate Tune
+      const coarseMult = Math.pow(2, s.oscCoarse / 12);
+      const fineMult = Math.pow(2, s.oscFine / 1200);
+      const basePlaybackRate = s.pitch * coarseMult * fineMult;
+
+      const duration = (buffer.duration * (s.trimEnd - s.trimStart)) / basePlaybackRate;
 
       for (let v = 0; v < numVoices; v++) {
         const source = ctx.createBufferSource();
@@ -184,7 +213,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         const distortionNode = ctx.createWaveShaper();
         const limiterNode = ctx.createDynamicsCompressor();
 
-        // Limiter Settings
+        // Limiter
         limiterNode.threshold.setValueAtTime(-1, startTime);
         limiterNode.knee.setValueAtTime(0, startTime);
         limiterNode.ratio.setValueAtTime(20, startTime);
@@ -193,31 +222,35 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
 
         const detune = v === 0 ? 0 : v === 1 ? s.unison * 0.1 : -s.unison * 0.1;
         source.buffer = buffer;
-        source.playbackRate.value = s.pitch + detune;
+        source.playbackRate.value = basePlaybackRate + detune;
         panNode.pan.value = s.pan + (v === 1 ? 0.2 : v === 2 ? -0.2 : 0);
 
-        // Filter Envelope
-        const baseFreq = 200 + (Math.pow(s.cutoff, 2) * 19800);
+        // SVF Filter Mode
+        filterNode.type = s.svfType === 'lowpass' ? 'lowpass' : s.svfType === 'highpass' ? 'highpass' : 'bandpass';
+        
+        // SVF Envelope
+        const baseFreq = 200 + (Math.pow(s.svfCut, 2) * 19800);
+        const peakFreq = Math.min(22000, baseFreq * (1 + (s.svfEnv * 10)));
         filterNode.frequency.setValueAtTime(baseFreq, startTime);
-        filterNode.frequency.exponentialRampToValueAtTime(Math.min(22000, baseFreq * (1 + s.filterAttack)), startTime + s.filterAttack);
-        filterNode.frequency.exponentialRampToValueAtTime(Math.max(20, baseFreq * s.filterSustain), startTime + s.filterAttack + s.filterDecay);
+        filterNode.frequency.exponentialRampToValueAtTime(peakFreq, startTime + s.svfAttack);
+        filterNode.frequency.exponentialRampToValueAtTime(Math.max(20, peakFreq * s.svfSustain), startTime + s.svfAttack + s.svfDecay);
+        filterNode.Q.value = s.svfEmph * 20;
 
-        // Volume AHDSR Neural Envelope
-        const peakGain = s.volume * s.limiterPre;
+        // AMP Envelope
+        const peakGain = s.volume * s.limiterPre * s.ampLevel;
         gainNode.gain.setValueAtTime(0, startTime);
-        gainNode.gain.linearRampToValueAtTime(peakGain, startTime + s.volAttack);
-        gainNode.gain.setValueAtTime(peakGain, startTime + s.volAttack + s.volHold);
-        gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain * s.volSustain), startTime + s.volAttack + s.volHold + s.volDecay);
+        gainNode.gain.linearRampToValueAtTime(peakGain, startTime + s.ampAttack);
+        gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain * s.ampSustain), startTime + s.ampAttack + s.ampDecay);
         gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
 
-        // Vibrato (LFO)
-        if (s.vibrato > 0) {
+        // LFO Modulation (Simplified Routing)
+        if (s.lfoRate > 0) {
           const lfo = ctx.createOscillator();
           const lfoGain = ctx.createGain();
-          lfo.frequency.value = 5;
-          lfoGain.gain.value = s.vibrato * 0.5;
+          lfo.frequency.value = s.lfoRate * 10;
+          lfoGain.gain.value = s.svfLfo * 1000; // Modulate Filter
           lfo.connect(lfoGain);
-          lfoGain.connect(source.playbackRate);
+          lfoGain.connect(filterNode.frequency);
           lfo.start(startTime);
           lfo.stop(startTime + duration);
         }
@@ -274,51 +307,22 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   }, [isPlaying, scheduleNextNote, initAudioContext]);
 
   const randomizePattern = () => {
-    const channelsToRandomize = Object.keys(selectedClipsForChannel).filter(ch => !!selectedClipsForChannel[ch]);
-
-    if (channelsToRandomize.length === 0) {
-      toast({ title: "No Clips Assigned", description: "Select a clip for at least one track first.", variant: "destructive" });
+    const activeChannels = Object.keys(selectedClipsForChannel).filter(ch => !!selectedClipsForChannel[ch]);
+    if (activeChannels.length === 0) {
+      toast({ title: "No Tracks Selected", description: "Select a clip for a track first.", variant: "destructive" });
       return;
     }
 
     const newGrid: Record<string, string[]> = { ...grid };
-    channelsToRandomize.forEach(ch => {
+    activeChannels.forEach(ch => {
       const clipId = selectedClipsForChannel[ch];
       for (let s = 0; s < numSteps; s++) {
-        if (Math.random() > 0.8) {
-          newGrid[`${ch}-${s}`] = [clipId];
-        } else {
-           delete newGrid[`${ch}-${s}`];
-        }
+        if (Math.random() > 0.85) newGrid[`${ch}-${s}`] = [clipId];
+        else delete newGrid[`${ch}-${s}`];
       }
     });
-
     setGrid(newGrid);
-    toast({ title: "Pattern Randomized" });
-  };
-
-  const shiftPattern = (direction: 'left' | 'right') => {
-    const newGrid: Record<string, string[]> = {};
-    Object.keys(grid).forEach(key => {
-      const [ch, step] = key.split('-').map(Number);
-      let newStep = direction === 'right' ? (step + 1) % numSteps : (step - 1 + numSteps) % numSteps;
-      newGrid[`${ch}-${newStep}`] = grid[key];
-    });
-    setGrid(newGrid);
-  };
-
-  const mirrorPattern = () => {
-    const newGrid = { ...grid };
-    const half = Math.floor(numSteps / 2);
-    for (let c = 0; c < numChannels; c++) {
-      for (let s = 0; s < half; s++) {
-        const sourceKey = `${c}-${s}`;
-        const targetKey = `${c}-${s + half}`;
-        if (newGrid[sourceKey]) newGrid[targetKey] = [...newGrid[sourceKey]];
-      }
-    }
-    setGrid(newGrid);
-    toast({ title: "Pattern Duplicated" });
+    toast({ title: "Pattern Generated" });
   };
 
   const updateChannelSetting = (idx: string, key: keyof ChannelSettings, val: any) => {
@@ -384,7 +388,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value.toUpperCase())}
-              className="text-3xl font-black italic tracking-tighter bg-transparent border-none focus:ring-0 w-full outline-none text-primary selection:bg-white"
+              className="text-3xl font-black italic tracking-tighter bg-transparent border-none focus:ring-0 w-full outline-none text-primary"
               placeholder="PROJECT_TITLE"
             />
             <div className="flex flex-col md:flex-row items-center gap-8">
@@ -394,7 +398,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                   <Button variant="ghost" size="sm" onClick={randomizePattern} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary border border-primary/10 gap-2">
                     <Dices className="w-3.5 h-3.5" /> Randomize
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={mirrorPattern} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary border border-primary/10 gap-2"><Copy className="w-3.5 h-3.5" /> Duplicate</Button>
                   <Button variant="ghost" size="sm" onClick={() => setGrid({})} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-500 border border-red-500/20 gap-2"><X className="w-3.5 h-3.5" /> Clear</Button>
                 </div>
               </div>
@@ -411,7 +414,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                 onBlur={() => {
                   let val = parseInt(bpmInput);
                   if (isNaN(val) || val < 60) val = 60;
-                  else if (val > 200) val = 200;
+                  else if (val > 240) val = 240;
                   setBpm(val);
                   setBpmInput(val.toString());
                 }}
@@ -451,56 +454,54 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         </div>
       </div>
 
-      <div className="glass-panel flex-col w-full h-full flex justify-between items-start rounded-[3rem] p-12 gold-shadow bg-black/40">
-        <div className='w-full h-full p-3 flex justify-between' >
-          <div className='min-w-[35%] w-[35%] justify-start items-start h-full border-r flex flex-col p-3' >
+      <div className="glass-panel flex-col w-full rounded-[3rem] p-12 gold-shadow bg-black/40">
+        <div className='w-full flex justify-between' >
+          <div className='min-w-[35%] w-[35%] border-r border-white/5 flex flex-col p-4 space-y-4' >
             {Array.from({ length: numChannels }).map((_, chIdx) => {
               const chKey = chIdx.toString();
               const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
               const selId = selectedClipsForChannel[chKey] || '';
               return (
-                <div key={chIdx} className="flex h-[148px] items-center gap-8 transition-all w-full">
-                  <div className="w-full shrink-0 bg-neutral-900/60 p-3 rounded-[2.5rem] flex items-center gap-6 border border-white/5">
-                    <button
-                      onClick={() => { if (selId) playClip(selId, chKey); }}
-                      className={cn("w-16 h-16 rounded-[1.5rem] flex items-center justify-center transition-all shadow-2xl shrink-0", s.muted ? "bg-neutral-800" : s.color)}
+                <div key={chIdx} className="bg-neutral-900/40 p-5 rounded-[2.5rem] flex items-center gap-6 border border-white/5">
+                  <button
+                    onClick={() => { if (selId) playClip(selId, chKey); }}
+                    className={cn("w-16 h-16 rounded-[1.5rem] flex items-center justify-center transition-all shrink-0", s.muted ? "bg-neutral-800" : s.color)}
+                  >
+                    <Music className={cn("w-8 h-8", s.muted ? "text-muted-foreground" : "text-black")} />
+                  </button>
+                  <div className="flex-1 space-y-4 min-w-0">
+                    <select
+                      className="w-full bg-transparent text-[11px] font-black uppercase text-primary outline-none cursor-pointer truncate"
+                      value={selId}
+                      onChange={(e) => setSelectedClipsForChannel(p => ({ ...p, [chKey]: e.target.value }))}
                     >
-                      <Music className={cn("w-8 h-8", s.muted ? "text-muted-foreground" : "text-black")} />
-                    </button>
-                    <div className="flex-1 space-y-4 min-w-0">
-                      <select
-                        className="w-full bg-transparent text-[11px] font-black uppercase text-primary outline-none cursor-pointer truncate"
-                        value={selId}
-                        onChange={(e) => setSelectedClipsForChannel(p => ({ ...p, [chKey]: e.target.value }))}
-                      >
-                        <option value="" className="bg-black">SELECT_CLIP</option>
-                        {clips.map(c => <option key={c.id} value={c.id} className="bg-black">{c.name}</option>)}
-                      </select>
-                      <div className="flex items-center gap-4">
-                        <Volume1 className="w-3.5 h-3.5 text-muted-foreground" />
-                        <Slider value={[s.volume * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'volume', v[0] / 100)} className="h-1.5 flex-1" />
-                      </div>
+                      <option value="" className="bg-black">SELECT_CLIP</option>
+                      {clips.map(c => <option key={c.id} value={c.id} className="bg-black">{c.name}</option>)}
+                    </select>
+                    <div className="flex items-center gap-4">
+                      <Volume1 className="w-3.5 h-3.5 text-muted-foreground" />
+                      <Slider value={[s.volume * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'volume', v[0] / 100)} className="h-1.5 flex-1" />
                     </div>
-                    <div className="flex flex-col gap-2 shrink-0">
-                      <Button variant="ghost" size="icon" className={cn("h-10 w-10 rounded-xl", s.muted ? "text-red-500 bg-red-500/10" : "text-muted-foreground")} onClick={() => updateChannelSetting(chKey, 'muted', !s.muted)}>
-                        {s.muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-                      </Button>
-                      <ChannelSettingsDialog 
-                        channelIdx={chIdx} 
-                        settings={s} 
-                        onUpdate={(key, val) => updateChannelSetting(chKey, key, val)}
-                        onAudition={() => { if (selId) playClip(selId, chKey); }}
-                      />
-                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 shrink-0">
+                    <Button variant="ghost" size="icon" className={cn("h-10 w-10 rounded-xl", s.muted ? "text-red-500 bg-red-500/10" : "text-muted-foreground")} onClick={() => updateChannelSetting(chKey, 'muted', !s.muted)}>
+                      {s.muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                    </Button>
+                    <ChannelSettingsDialog 
+                      channelIdx={chIdx} 
+                      settings={s} 
+                      onUpdate={(key, val) => updateChannelSetting(chKey, key, val)}
+                      onAudition={() => { if (selId) playClip(selId, chKey); }}
+                    />
                   </div>
                 </div>
               );
             })}
           </div>
 
-          <div className="h-full pl-3 max-w-[64%] justify-between items-start overflow-x-auto min-w-[60%] flex-col">
+          <div className="h-full pl-6 max-w-[65%] overflow-x-auto flex-col space-y-4">
             {Array.from({ length: numChannels }).map((_, chIdx) => (
-              <div key={chIdx} className='flex items-end justify-start gap-3 h-[150px] w-auto'>
+              <div key={chIdx} className='flex items-center justify-start gap-2 h-[106px] w-auto'>
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const clipIds = grid[`${chIdx}-${stepIdx}`] || [];
                   const clip = clips.find(c => c.id === clipIds[0]);
@@ -526,9 +527,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                         setGrid(ng);
                       }}
                       className={cn(
-                        "w-12 h-[80%] rounded-xl transition-all duration-300 flex items-center justify-center relative shrink-0",
+                        "w-12 h-20 rounded-xl transition-all duration-300 flex items-center justify-center relative shrink-0",
                         clip ? `${channelSettings[chIdx.toString()]?.color} shadow-2xl brightness-125` : "bg-neutral-800/40 border border-white/5 hover:bg-neutral-800",
-                        isCurrent ? "ring-2 ring-primary scale-105 z-10" : "scale-100",
+                        isCurrent ? "ring-2 ring-primary scale-110 z-10" : "scale-100",
                         isGroupStart ? "ml-4 first:ml-0" : ""
                       )}
                     >
@@ -544,7 +545,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
 
         <Button
           variant="outline"
-          className="w-full border-dashed border-2 py-12 rounded-[2.5rem] gap-4 bg-black/20 border-primary/20 hover:bg-primary/5 group"
+          className="w-full border-dashed border-2 py-10 mt-8 rounded-[2.5rem] gap-4 bg-black/20 border-primary/20 hover:bg-primary/5 group"
           onClick={() => {
             const nextIdx = numChannels;
             setNumChannels(prev => prev + 1);
