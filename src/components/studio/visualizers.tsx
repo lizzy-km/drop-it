@@ -4,15 +4,17 @@
 import React, { useEffect, useRef } from 'react';
 import { Activity, Waves, Zap } from 'lucide-react';
 
-export const VisualEnvelope = ({ attack, release }: { attack: number, release: number }) => {
-  const a = (attack / 3) * 100;
-  const r = (release / 3) * 100;
+export const VisualEnvelope = ({ attack, release }: { attack?: number, release?: number }) => {
+  const att = attack ?? 0.01;
+  const rel = release ?? 0.1;
+  const a = (att / 3) * 100;
+  const r = (rel / 3) * 100;
   
   return (
     <div className="h-24 w-40 bg-black/60 rounded-xl border border-primary/10 overflow-hidden relative shadow-inner">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
         <path 
-          d={`M 0 100 L ${a} 0 L ${100 - r} 0 L 100 100 Z`}
+          d={`M 0 100 L ${Math.max(0, a)} 0 L ${Math.min(100, 100 - r)} 0 L 100 100 Z`}
           fill="rgba(250, 204, 21, 0.2)"
           stroke="hsl(var(--primary))"
           strokeWidth="2"
@@ -24,17 +26,21 @@ export const VisualEnvelope = ({ attack, release }: { attack: number, release: n
   );
 };
 
-export const VisualFilterCurve = ({ cutoff, resonance, type }: { cutoff: number, resonance: number, type: string }) => {
-  const c = cutoff * 100;
-  const res = resonance * 40;
+export const VisualFilterCurve = ({ cutoff, resonance, type }: { cutoff?: number, resonance?: number, type?: string }) => {
+  const cut = cutoff ?? 1;
+  const resVal = resonance ?? 0.2;
+  const t = type ?? 'lowpass';
+  
+  const c = cut * 100;
+  const res = resVal * 40;
   
   let d = '';
-  if (type === 'lowpass') {
-    d = `M 0 100 L ${c - 10} 100 Q ${c} ${100 - res} ${c + 20} 100`;
-  } else if (type === 'highpass') {
-    d = `M 100 100 L ${c + 10} 100 Q ${c} ${100 - res} ${c - 20} 100`;
+  if (t === 'lowpass') {
+    d = `M 0 100 L ${Math.max(0, c - 10)} 100 Q ${c} ${100 - res} ${Math.min(100, c + 20)} 100`;
+  } else if (t === 'highpass') {
+    d = `M 100 100 L ${Math.min(100, c + 10)} 100 Q ${c} ${100 - res} ${Math.max(0, c - 20)} 100`;
   } else {
-    d = `M 0 100 L ${c - 20} 100 Q ${c} ${100 - res} ${c + 20} 100 L 100 100`;
+    d = `M 0 100 L ${Math.max(0, c - 20)} 100 Q ${c} ${100 - res} ${Math.min(100, c + 20)} 100 L 100 100`;
   }
 
   return (
@@ -48,17 +54,30 @@ export const VisualFilterCurve = ({ cutoff, resonance, type }: { cutoff: number,
           strokeWidth="3"
           className="transition-all duration-300"
         />
-        <circle cx={c} cy={100 - (res / 2)} r="2" fill="white" className="animate-pulse" />
+        <circle cx={isNaN(c) ? 50 : c} cy={isNaN(100 - (res / 2)) ? 50 : 100 - (res / 2)} r="2" fill="white" className="animate-pulse" />
       </svg>
       <div className="absolute top-2 left-4 text-[7px] font-black uppercase text-primary/40 tracking-widest">SVF_RESPONSE</div>
     </div>
   );
 };
 
-export const VisualLFO = ({ rate, delay }: { rate: number, delay: number }) => {
+export const VisualLFO = ({ rate, delay }: { rate?: number, delay?: number }) => {
+  const rVal = rate ?? 1;
+  const [time, setTime] = React.useState(0);
+
+  useEffect(() => {
+    let frame: number;
+    const animate = () => {
+      setTime(prev => prev + 1);
+      frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   const points = [];
   for (let x = 0; x <= 100; x += 2) {
-    const y = 50 + Math.sin((x + (Date.now() / 20)) * rate * 0.5) * 30;
+    const y = 50 + Math.sin((x + (time / 2)) * rVal * 0.5) * 30;
     points.push(`${x},${y}`);
   }
 

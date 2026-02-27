@@ -117,10 +117,22 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   const [grid, setGrid] = useState<Record<string, string[]>>(track?.grid || {});
   const [title, setTitle] = useState(track?.title || 'NEW_PROJECT_01');
 
-  const [channelSettings, setChannelSettings] = useState<Record<string, ChannelSettings>>(
-    track?.channelSettings ||
-    Object.fromEntries(Array.from({ length: DEFAULT_CHANNELS }).map((_, i) => [i.toString(), { ...DEFAULT_CHANNEL_SETTINGS, color: CHANNEL_COLORS[i % CHANNEL_COLORS.length].class }]))
-  );
+  const [channelSettings, setChannelSettings] = useState<Record<string, ChannelSettings>>(() => {
+    if (track?.channelSettings) {
+      const merged: Record<string, ChannelSettings> = {};
+      Object.entries(track.channelSettings).forEach(([key, val]) => {
+        merged[key] = { ...DEFAULT_CHANNEL_SETTINGS, ...val };
+      });
+      return merged;
+    }
+    return Object.fromEntries(
+      Array.from({ length: DEFAULT_CHANNELS }).map((_, i) => [
+        i.toString(), 
+        { ...DEFAULT_CHANNEL_SETTINGS, color: CHANNEL_COLORS[i % CHANNEL_COLORS.length].class }
+      ])
+    );
+  });
+
   const [selectedClipsForChannel, setSelectedClipsForChannel] = useState<Record<string, string>>(
     track?.selectedClips ||
     Object.fromEntries(Array.from({ length: DEFAULT_CHANNELS }).map((_, i) => [i.toString(), '']))
@@ -199,7 +211,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         buffer = reversedBuffersRef.current[clipId];
       }
 
-      // Safe Parameter Calculations
       const unison = s.unison || 0;
       const pitch = s.pitch || 1.0;
       const coarseMult = Math.pow(2, (s.oscCoarse || 0) / 12);
@@ -208,8 +219,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       
       const numVoices = (s.fxActive && unison > 0) ? 3 : 1;
       const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
-      const trimStart = s.trimStart || 0;
-      const trimEnd = s.trimEnd || 1;
+      const trimStart = s.trimStart ?? 0;
+      const trimEnd = s.trimEnd ?? 1;
       const duration = (buffer.duration * (trimEnd - trimStart)) / basePlaybackRate;
 
       for (let v = 0; v < numVoices; v++) {
@@ -226,30 +237,30 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         limiterNode.attack.setValueAtTime(0.001, startTime);
         limiterNode.release.setValueAtTime(0.1, startTime);
 
-        const detune = (v === 0) ? 0 : (v === 1 ? unison * 0.1 : -unison * 0.1);
+        const detuneAmount = (v === 0) ? 0 : (v === 1 ? unison * 0.1 : -unison * 0.1);
         source.buffer = buffer;
-        source.playbackRate.setValueAtTime(basePlaybackRate + detune, startTime);
+        source.playbackRate.setValueAtTime(Math.max(0.001, basePlaybackRate + detuneAmount), startTime);
         
-        const panValue = Math.max(-1, Math.min(1, s.pan + (v === 1 ? 0.2 : v === 2 ? -0.2 : 0)));
+        const panValue = Math.max(-1, Math.min(1, (s.pan ?? 0) + (v === 1 ? 0.2 : v === 2 ? -0.2 : 0)));
         panNode.pan.setValueAtTime(panValue, startTime);
 
         if (s.svfActive) {
           filterNode.type = s.svfType || 'lowpass';
-          const baseFreq = 20 + (Math.pow(s.svfCut || 1, 2) * 19980);
-          const peakFreq = Math.min(22000, baseFreq * (1 + ((s.svfEnv || 0) * 10)));
+          const baseFreq = 20 + (Math.pow(s.svfCut ?? 1, 2) * 19980);
+          const peakFreq = Math.min(22000, baseFreq * (1 + ((s.svfEnv ?? 0) * 10)));
           filterNode.frequency.setValueAtTime(baseFreq, startTime);
-          filterNode.frequency.exponentialRampToValueAtTime(peakFreq, startTime + (s.svfAttack || 0.01));
-          filterNode.frequency.exponentialRampToValueAtTime(Math.max(20, peakFreq * (s.svfSustain || 0.5)), startTime + (s.svfAttack || 0.01) + (s.svfDecay || 0.1));
-          filterNode.Q.setValueAtTime((s.svfEmph || 0.2) * 20, startTime);
+          filterNode.frequency.exponentialRampToValueAtTime(peakFreq, startTime + (s.svfAttack ?? 0.01));
+          filterNode.frequency.exponentialRampToValueAtTime(Math.max(20, peakFreq * (s.svfSustain ?? 0.5)), startTime + (s.svfAttack ?? 0.01) + (s.svfDecay ?? 0.1));
+          filterNode.Q.setValueAtTime((s.svfEmph ?? 0.2) * 20, startTime);
         } else {
           filterNode.type = 'allpass';
         }
 
-        const peakGain = s.ampActive ? ((s.volume || 0.8) * (s.limiterPre || 1.0) * (s.ampLevel || 1.0)) : (s.volume || 0.8);
+        const peakGain = s.ampActive ? ((s.volume ?? 0.8) * (s.limiterPre ?? 1.0) * (s.ampLevel ?? 1.0)) : (s.volume ?? 0.8);
         if (s.ampActive) {
           gainNode.gain.setValueAtTime(0, startTime);
-          gainNode.gain.linearRampToValueAtTime(peakGain, startTime + (s.ampAttack || 0.01));
-          gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain * (s.ampSustain || 1.0)), startTime + (s.ampAttack || 0.01) + (s.ampDecay || 0.1));
+          gainNode.gain.linearRampToValueAtTime(peakGain, startTime + (s.ampAttack ?? 0.01));
+          gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain * (s.ampSustain ?? 1.0)), startTime + (s.ampAttack ?? 0.01) + (s.ampDecay ?? 0.1));
           gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
         } else {
           gainNode.gain.setValueAtTime(peakGain, startTime);
@@ -257,7 +268,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
 
         source.connect(filterNode);
         filterNode.connect(distortionNode);
-        if (s.fxActive && (s.distortion || 0) > 0) {
+        if (s.fxActive && (s.distortion ?? 0) > 0) {
           distortionNode.curve = makeDistortionCurve(s.distortion);
         } else {
           distortionNode.curve = null;
@@ -266,14 +277,14 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         gainNode.connect(panNode);
         
         const destination = context ? context.destination : (masterAnalyserRef.current || ctx.destination);
-        if (s.fxActive && (s.limiterMix || 0) > 0) {
+        if (s.fxActive && (s.limiterMix ?? 0) > 0) {
           panNode.connect(limiterNode);
           limiterNode.connect(destination);
         } else {
           panNode.connect(destination);
         }
 
-        source.start(startTime, trimStart * buffer.duration, duration);
+        source.start(startTime, (trimStart ?? 0) * buffer.duration, duration);
       }
     } catch (e) {
       console.error(e);
@@ -566,7 +577,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                     </select>
                     <div className="flex items-center gap-4">
                       <Volume1 className="w-3.5 h-3.5 text-muted-foreground" />
-                      <Slider value={[s.volume * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'volume', v[0] / 100)} className="h-1.5 flex-1" />
+                      <Slider value={[(s.volume ?? 0.8) * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'volume', v[0] / 100)} className="h-1.5 flex-1" />
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 shrink-0">
