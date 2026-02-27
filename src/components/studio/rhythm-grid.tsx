@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -203,10 +202,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         buffer = reversedBuffersRef.current[clipId];
       }
 
-      const numVoices = s.unison > 0 ? 3 : 1;
+      const numVoices = (s.fxActive && s.unison > 0) ? 3 : 1;
       const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
       
-      // Calculate Tune
       let coarseMult = 1.0;
       let fineMult = 1.0;
       if (s.oscActive) {
@@ -214,7 +212,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         fineMult = Math.pow(2, s.oscFine / 1200);
       }
       const basePlaybackRate = s.pitch * coarseMult * fineMult;
-
       const duration = (buffer.duration * (s.trimEnd - s.trimStart)) / basePlaybackRate;
 
       for (let v = 0; v < numVoices; v++) {
@@ -225,19 +222,17 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         const distortionNode = ctx.createWaveShaper();
         const limiterNode = ctx.createDynamicsCompressor();
 
-        // Limiter
         limiterNode.threshold.setValueAtTime(-1, startTime);
         limiterNode.knee.setValueAtTime(0, startTime);
         limiterNode.ratio.setValueAtTime(20, startTime);
         limiterNode.attack.setValueAtTime(0.001, startTime);
         limiterNode.release.setValueAtTime(0.1, startTime);
 
-        const detune = v === 0 ? 0 : v === 1 ? s.unison * 0.1 : -s.unison * 0.1;
+        const detune = (v === 0) ? 0 : (v === 1 ? s.unison * 0.1 : -s.unison * 0.1);
         source.buffer = buffer;
         source.playbackRate.value = basePlaybackRate + detune;
         panNode.pan.value = s.pan + (v === 1 ? 0.2 : v === 2 ? -0.2 : 0);
 
-        // SVF Filter Mode
         if (s.svfActive) {
           filterNode.type = s.svfType === 'lowpass' ? 'lowpass' : s.svfType === 'highpass' ? 'highpass' : 'bandpass';
           const baseFreq = 200 + (Math.pow(s.svfCut, 2) * 19800);
@@ -250,7 +245,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
           filterNode.type = 'allpass';
         }
 
-        // AMP Envelope
         const peakGain = s.ampActive ? (s.volume * s.limiterPre * s.ampLevel) : s.volume;
         if (s.ampActive) {
           gainNode.gain.setValueAtTime(0, startTime);
@@ -331,9 +325,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     activeChannels.forEach(ch => {
       const clipId = selectedClipsForChannel[ch];
       for (let s = 0; s < numSteps; s++) {
-        if (Math.random() > 0.85) newGrid[`${ch}-${s}`] = [clipId];
-        else {
-           // Only clear the step for THIS channel
+        if (Math.random() > 0.85) {
+          newGrid[`${ch}-${s}`] = [clipId];
+        } else {
            const key = `${ch}-${s}`;
            if (newGrid[key]) {
               newGrid[key] = newGrid[key].filter(id => id !== clipId);
@@ -442,6 +436,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       a.download = `${title.replace(/\s+/g, '_')}_Master.wav`;
       a.click();
       URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Export Error", variant: "destructive" });
     } finally {
       setIsExporting(false);
     }
@@ -527,9 +524,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         </div>
       </div>
 
-      <div className="glass-panel flex-col w-full rounded-[3rem] p-12 gold-shadow bg-black/40">
-        <div className='w-full flex justify-between' >
-          <div className='min-w-[35%] w-[35%] border-r border-white/5 flex flex-col p-4 space-y-4' >
+      <div className="glass-panel flex flex-col w-full rounded-[3rem] p-12 gold-shadow bg-black/40">
+        <div className='w-full flex flex-col lg:flex-row' >
+          <div className='lg:w-[35%] border-r border-white/5 flex flex-col p-4 space-y-4' >
             {Array.from({ length: numChannels }).map((_, chIdx) => {
               const chKey = chIdx.toString();
               const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
@@ -572,9 +569,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
             })}
           </div>
 
-          <div className="h-full pl-6 max-w-[65%] overflow-x-auto flex-col space-y-4">
+          <div className="flex-1 pl-6 overflow-x-auto flex flex-col space-y-4 py-4">
             {Array.from({ length: numChannels }).map((_, chIdx) => (
-              <div key={chIdx} className='flex items-center justify-start gap-2 h-[106px] w-auto'>
+              <div key={chIdx} className='flex items-center justify-start gap-2 h-[106px]'>
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const clipIds = grid[`${chIdx}-${stepIdx}`] || [];
                   const clip = clips.find(c => c.id === clipIds[0]);
@@ -632,4 +629,3 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     </div>
   );
 }
-
