@@ -10,7 +10,8 @@ import {
   Gauge, Activity, Sliders, Repeat,
   ChevronRight, ArrowRightLeft, FastForward, Clock, FileUp, FileDown,
   Dices, ArrowLeft, ArrowRight, Copy, X, AlertTriangle, Wand2,
-  Upload, DownloadCloud
+  Upload, DownloadCloud,
+  Edit2Icon
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { cn } from '@/lib/utils';
@@ -488,15 +489,21 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     <div className="space-y-12">
       <div className="glass-panel p-10 rounded-[3rem] gold-shadow relative overflow-hidden">
         <div className="absolute inset-0 studio-grid-bg opacity-10" />
-        <div className="flex w-full flex-col lg:flex-row items-center justify-between gap-12 relative z-10">
+        <div className="flex w-full flex-col lg:flex-row items-end justify-between gap-12 relative z-10">
           <div className="flex-1 space-y-6 w-full">
-            <div className=' flex gap-3 ' >
-                <input
+            <div className=' flex gap-6 ' >
+              <div className=' flex justify-start items-center text-primary/60 border-r pr-6 border-primary/30 ' >
+                 
+               <input
               value={title}
               onChange={(e) => setTitle(e.target.value.toUpperCase())}
-              className="text-3xl font-black italic tracking-tighter bg-transparent border-none focus:ring-0 w-full outline-none text-primary"
+              className="text-3xl font-black italic tracking-tighter bg-transparent border-b border-primary/20 focus:ring-0 w-full outline-none text-primary"
               placeholder="PROJECT_TITLE"
             />
+            <Edit2Icon className="" />
+           
+              </div>
+               
              <div className="flex gap-3">
               <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleSave} title="Save to Database"><Save className="w-5 h-5" /></Button>
               <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleExportConfig} title="Export Project JSON"><DownloadCloud className="w-5 h-5" /></Button>
@@ -513,7 +520,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
             <div className="flex flex-col md:flex-row items-center gap-8">
               <div className="flex items-center gap-4 h-full rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full bg-black/20">
                 <MasterVisualizer analyser={masterAnalyserRef.current} />
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2">
                   <Button variant="ghost" size="sm" onClick={randomizePattern} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary border border-primary/10 gap-2">
                     <Dices className="w-3.5 h-3.5" /> Randomize
                   </Button>
@@ -523,7 +530,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
             </div>
           </div>
 
-          <div className="flex items-center gap-10">
+          <div className="flex items-center border-primary/30 border px-3 py-4 rounded-lg   gap-10 h-full ">
             <div className="flex flex-col items-center gap-4 w-[80px]">
               <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">BPM</span>
               <div className="flex flex-col gap-3 w-full">
@@ -584,7 +591,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
             </div>
             <Button
               variant={isPlaying ? "destructive" : "default"}
-              className={cn("w-24 h-24 rounded-[2.5rem] shadow-2xl transition-all", isPlaying ? "bg-red-500" : "bg-primary text-black")}
+              className={cn("w-[60] h-[60] rounded-[2.5rem] shadow-2xl transition-all", isPlaying ? "bg-red-500" : "bg-primary text-black")}
               onClick={() => setIsPlaying(!isPlaying)}
             >
               {isPlaying ? <Square className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
@@ -596,7 +603,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
 
       <div className="glass-panel flex flex-col w-full rounded-[3rem] p-12 gold-shadow bg-black/40">
         <div className='w-full flex flex-col lg:flex-row' >
-          <div className='lg:w-[35%] border-r border-white/5 flex flex-col p-4 space-y-4' >
+          <div className='lg:w-[35%] border-r border-white/5 flex flex-col p-4 ' >
             {Array.from({ length: numChannels }).map((_, chIdx) => {
               const chKey = chIdx.toString();
               const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
@@ -640,9 +647,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
             })}
           </div>
 
-          <div className="flex-1 pl-6 overflow-x-auto flex flex-col space-y-4 py-4">
+          <div className="flex-1 pl-6 overflow-x-auto flex flex-col justify-between  py-4">
             {Array.from({ length: numChannels }).map((_, chIdx) => (
-              <div key={chIdx} className='flex items-center justify-start gap-2 h-[106px]'>
+              <div key={chIdx} className='flex items-center  justify-start gap-2 h-[130px]'>
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const clipIds = grid[`${chIdx}-${stepIdx}`] || [];
                   const clip = clips.find(c => c.id === clipIds[0]);
