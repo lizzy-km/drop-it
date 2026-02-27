@@ -1,51 +1,99 @@
+
 "use client";
 
 import React, { useEffect, useRef } from 'react';
-import { Activity } from 'lucide-react';
+import { Activity, Waves, Zap } from 'lucide-react';
 
-export const VisualEnvelope = ({ attack, release }: { attack: number, release: number }) => {
-  const a = (attack / 2) * 100;
-  const r = (release / 2) * 100;
+export const VisualEnvelope = ({ attack, release }: { attack?: number, release?: number }) => {
+  const att = attack ?? 0.01;
+  const rel = release ?? 0.1;
+  // Safety checks for NaN
+  const a = isNaN(att) ? 0.01 : (att / 3) * 100;
+  const r = isNaN(rel) ? 0.1 : (rel / 3) * 100;
   
   return (
-    <div className="h-32 w-full bg-black/60 rounded-[0] border border-primary/10 overflow-hidden relative shadow-inner">
+    <div className="h-24 w-40 bg-black/60 rounded-xl border border-primary/10 overflow-hidden relative shadow-inner">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
-        <defs>
-          <linearGradient id="env-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
-          </linearGradient>
-        </defs>
         <path 
-          d={`M 0 100 L ${a} 0 L ${100 - r} 0 L 100 100 Z`}
-          fill="url(#env-grad)"
+          d={`M 0 100 L ${Math.max(0, a)} 0 L ${Math.min(100, 100 - r)} 0 L 100 100 Z`}
+          fill="rgba(250, 204, 21, 0.2)"
           stroke="hsl(var(--primary))"
           strokeWidth="2"
-          className="transition-all duration-500 ease-out"
+          className="transition-all duration-500"
         />
-        <circle cx={a} cy="0" r="2" fill="white" className="animate-pulse" />
-        <circle cx={100 - r} cy="0" r="2" fill="white" className="animate-pulse" />
       </svg>
-      <div className="absolute bottom-2 left-4 text-[8px] font-black uppercase text-primary/40 tracking-widest">Envelope_A/R</div>
+      <div className="absolute bottom-1 left-2 text-[6px] font-black uppercase text-primary/40 tracking-widest">AHDSR_ENV</div>
     </div>
   );
 };
 
-export const VisualTrim = ({ start, end }: { start: number, end: number }) => {
+export const VisualFilterCurve = ({ cutoff, resonance, type }: { cutoff?: number, resonance?: number, type?: string }) => {
+  const cut = cutoff ?? 1;
+  const resVal = resonance ?? 0.2;
+  const t = type ?? 'lowpass';
+  
+  const c = isNaN(cut) ? 100 : cut * 100;
+  const res = isNaN(resVal) ? 8 : resVal * 40;
+  
+  let d = '';
+  if (t === 'lowpass') {
+    d = `M 0 100 L ${Math.max(0, c - 10)} 100 Q ${c} ${100 - res} ${Math.min(100, c + 20)} 100`;
+  } else if (t === 'highpass') {
+    d = `M 100 100 L ${Math.min(100, c + 10)} 100 Q ${c} ${100 - res} ${Math.max(0, c - 20)} 100`;
+  } else {
+    d = `M 0 100 L ${Math.max(0, c - 20)} 100 Q ${c} ${100 - res} ${Math.min(100, c + 20)} 100 L 100 100`;
+  }
+
   return (
-    <div className="h-24 w-full bg-black/60 rounded-[0] border border-primary/10 overflow-hidden relative shadow-inner group">
-      <div className="absolute inset-0 opacity-20 flex items-center justify-around pointer-events-none">
-        {Array.from({ length: 20 }).map((_, i) => (
-          <div key={i} className="w-0.5 bg-primary" style={{ height: `${20 + Math.random() * 60}%` }} />
-        ))}
-      </div>
-      <div 
-        className="absolute h-full bg-primary/20 border-x border-primary/60 transition-all duration-300"
-        style={{ left: `${start * 100}%`, right: `${(1 - end) * 100}%` }}
-      >
-        <div className="absolute inset-0 studio-grid-bg opacity-30" />
-      </div>
-      <div className="absolute bottom-2 left-4 text-[8px] font-black uppercase text-primary/40 tracking-widest">Trim_Slice</div>
+    <div className="h-32 w-full bg-black/60 rounded-[2rem] border border-primary/10 overflow-hidden relative">
+      <div className="absolute inset-0 opacity-10 studio-grid-bg" />
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
+        <path 
+          d={d}
+          fill="none"
+          stroke="hsl(var(--primary))"
+          strokeWidth="3"
+          className="transition-all duration-300"
+        />
+        <circle cx={isNaN(c) ? 50 : c} cy={isNaN(100 - (res / 2)) ? 50 : 100 - (res / 2)} r="2" fill="white" className="animate-pulse" />
+      </svg>
+      <div className="absolute top-2 left-4 text-[7px] font-black uppercase text-primary/40 tracking-widest">SVF_RESPONSE</div>
+    </div>
+  );
+};
+
+export const VisualLFO = ({ rate, delay }: { rate?: number, delay?: number }) => {
+  const rVal = rate ?? 1;
+  const [time, setTime] = React.useState(0);
+
+  useEffect(() => {
+    let frame: number;
+    const animate = () => {
+      setTime(prev => prev + 1);
+      frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const points = [];
+  const safeRate = isNaN(rVal) ? 1 : rVal;
+  for (let x = 0; x <= 100; x += 2) {
+    const y = 50 + Math.sin((x + (time / 2)) * safeRate * 0.5) * 30;
+    points.push(`${x},${y}`);
+  }
+
+  return (
+    <div className="h-20 w-40 bg-black/60 rounded-xl border border-primary/10 overflow-hidden relative">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
+        <polyline 
+          points={points.join(' ')}
+          fill="none"
+          stroke="hsl(var(--primary))"
+          strokeWidth="2"
+        />
+      </svg>
+      <div className="absolute bottom-1 left-2 text-[6px] font-black uppercase text-primary/40 tracking-widest">LFO_WAVE</div>
     </div>
   );
 };
@@ -72,31 +120,20 @@ export const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }
       let barHeight;
       let x = 0;
 
-      let maxVal = 0;
       for (let i = 0; i < bufferLength; i++) {
-        if (dataArray[i] > maxVal) maxVal = dataArray[i];
         barHeight = (dataArray[i] / 255) * canvas.height;
-        
-        const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
-        gradient.addColorStop(0, 'rgba(250, 204, 21, 0.1)');
-        gradient.addColorStop(1, 'rgba(250, 204, 21, 0.8)');
-        
-        ctx.fillStyle = gradient;
+        ctx.fillStyle = `rgba(250, 204, 21, ${0.1 + (dataArray[i] / 255) * 0.8})`;
         ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
         x += barWidth + 1;
       }
-
-      const peakPercent = maxVal / 255;
-      ctx.fillStyle = peakPercent > 0.9 ? 'rgba(239, 68, 68, 0.8)' : 'rgba(250, 204, 21, 0.4)';
-      ctx.fillRect(canvas.width - 20, canvas.height * (1 - peakPercent), 10, canvas.height * peakPercent);
     };
 
     draw();
-    return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
+    return () => { if (animationRef.current) (typeof window !== 'undefined') && window.cancelAnimationFrame(animationRef.current!); };
   }, [analyser]);
 
   return (
-    <div className="  w-full bg-black/40 rounded-[1rem] overflow-hidden border border-primary/10 relative shadow-inner">
+    <div className="w-full bg-black/40 rounded-[1rem] overflow-hidden border border-primary/10 relative shadow-inner">
       <canvas ref={canvasRef} width={800} height={100} className="w-full h-full" />
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
         <Activity className="w-4 h-4 text-primary" />

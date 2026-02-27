@@ -28,10 +28,59 @@ export interface ChannelSettings {
   color: string; 
   muted: boolean;
   reversed: boolean;
-  attack: number; 
-  release: number; 
-  trimStart: number; 
-  trimEnd: number; 
+  
+  // Bypass Flags
+  oscActive: boolean;
+  svfActive: boolean;
+  lfoActive: boolean;
+  fxActive: boolean;
+  ampActive: boolean;
+
+  // Synthesis Parameters
+  unison: number;
+  vibrato: number;
+
+  // OSC Lab
+  oscCoarse: number; // semitones -24 to 24
+  oscFine: number;   // cents -100 to 100
+  oscLevel: number;
+  oscLfo: number;    // pitch lfo depth
+  oscEnv: number;    // pitch env depth
+  oscPw: number;     // phase/width
+
+  // AMP Envelope (Amplifier)
+  ampAttack: number;
+  ampHold: number;
+  ampDecay: number;
+  ampSustain: number;
+  ampRelease: number;
+  ampLevel: number;
+
+  // SVF (State Variable Filter)
+  svfCut: number;
+  svfEmph: number;
+  svfEnv: number;
+  svfLfo: number;
+  svfKb: number;
+  svfType: 'lowpass' | 'highpass' | 'bandpass';
+  svfAttack: number;
+  svfDecay: number;
+  svfSustain: number;
+  svfRelease: number;
+
+  // LFO Lab
+  lfoRate: number;
+  lfoDelay: number;
+
+  // Limiter
+  limiterPre: number;
+  limiterMix: number;
+
+  // Legacy/Internal Mapping
+  attack: number;
+  release: number;
+  trimStart: number;
+  trimEnd: number;
 }
 
 export interface Track {
@@ -47,11 +96,19 @@ export interface Track {
   createdAt: number;
 }
 
+export interface Preset {
+  id: string;
+  name: string;
+  settings: Partial<ChannelSettings>;
+  isFactory?: boolean;
+}
+
 const STORAGE_KEYS = {
   USERS: 'dropit_users',
   CLIPS: 'dropit_clips',
   TRACKS: 'dropit_tracks',
-  CURRENT_USER: 'dropit_current_user_id'
+  CURRENT_USER: 'dropit_current_user_id',
+  PRESETS: 'dropit_presets'
 };
 
 export const db = {
@@ -88,7 +145,6 @@ export const db = {
     const data = localStorage.getItem(STORAGE_KEYS.CLIPS);
     let clips: AudioClip[] = data ? JSON.parse(data) : [];
     
-    // Deduplicate logic to ensure unique clips
     const uniqueMap = new Map();
     clips.forEach(clip => uniqueMap.set(clip.id, clip));
     const dedupedClips = Array.from(uniqueMap.values());
@@ -106,7 +162,6 @@ export const db = {
       clips.push(clip);
     }
     
-    // Hard deduplication before storage commit
     const uniqueMap = new Map();
     clips.forEach(c => uniqueMap.set(c.id, c));
     localStorage.setItem(STORAGE_KEYS.CLIPS, JSON.stringify(Array.from(uniqueMap.values())));
@@ -122,7 +177,6 @@ export const db = {
     const data = localStorage.getItem(STORAGE_KEYS.TRACKS);
     let tracks: Track[] = data ? JSON.parse(data) : [];
     
-    // Deduplicate tracks by ID
     const uniqueMap = new Map();
     tracks.forEach(t => uniqueMap.set(t.id, t));
     const dedupedTracks = Array.from(uniqueMap.values());
@@ -150,6 +204,25 @@ export const db = {
   deleteTrack: (trackId: string) => {
     const tracks = db.getTracks().filter(t => t.id !== trackId);
     localStorage.setItem(STORAGE_KEYS.TRACKS, JSON.stringify(tracks));
+  },
+
+  getPresets: (): Preset[] => {
+    if (typeof window === 'undefined') return [];
+    const data = localStorage.getItem(STORAGE_KEYS.PRESETS);
+    return data ? JSON.parse(data) : [];
+  },
+
+  savePreset: (preset: Preset) => {
+    const presets = db.getPresets();
+    const existing = presets.findIndex(p => p.id === preset.id);
+    if (existing > -1) presets[existing] = preset;
+    else presets.push(preset);
+    localStorage.setItem(STORAGE_KEYS.PRESETS, JSON.stringify(presets));
+  },
+
+  deletePreset: (id: string) => {
+    const presets = db.getPresets().filter(p => p.id !== id);
+    localStorage.setItem(STORAGE_KEYS.PRESETS, JSON.stringify(presets));
   },
 
   getAllCreations: () => {

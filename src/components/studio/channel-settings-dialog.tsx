@@ -1,26 +1,160 @@
+
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Play, Maximize2, Waves, Timer, Sparkles, ArrowRightLeft, Sliders
+  Play, Maximize2, Waves, Timer, Sparkles, Sliders, Zap, 
+  Waveform, Music, Box, Settings2, Trash2, Library, Wand2,
+  Activity, Radio, ZapOff, Layers, Power, Save, Plus,
+  FileDown, FileUp, Download, Upload, FileJson
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ChannelSettings } from '@/lib/db';
+import { Switch } from '@/components/ui/switch';
+import { ChannelSettings, db, Preset } from '@/lib/db';
 import { toast } from '@/hooks/use-toast';
-import { VisualEnvelope, VisualTrim } from './visualizers';
+import { VisualEnvelope, VisualFilterCurve, VisualLFO } from './visualizers';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
 
 interface ChannelSettingsDialogProps {
   channelIdx: number;
   settings: ChannelSettings;
   onUpdate: (key: keyof ChannelSettings, val: any) => void;
+  onBatchUpdate: (settings: Partial<ChannelSettings>) => void;
   onAudition: () => void;
 }
 
-export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAudition }: ChannelSettingsDialogProps) {
+const FACTORY_PRESETS: Record<string, Partial<ChannelSettings>> = {
+  PUNCHY_KICK: {
+    ampAttack: 0.01, ampDecay: 0.1, ampSustain: 0, ampRelease: 0.05,
+    svfCut: 0.1, svfEmph: 0.2, svfType: 'lowpass', limiterPre: 1.2,
+    svfActive: true, ampActive: true, fxActive: true, oscActive: true,
+    volume: 0.9, pitch: 1.0
+  },
+  VAPOR_CHORD: {
+    ampAttack: 1.2, ampDecay: 0.8, ampSustain: 0.7, ampRelease: 1.5,
+    svfCut: 0.4, svfEmph: 0.6, svfType: 'bandpass', lfoRate: 0.3, oscLfo: 0.2,
+    svfActive: true, ampActive: true, lfoActive: true, oscActive: true,
+    volume: 0.7
+  },
+  INDUSTRIAL_HIT: {
+    distortion: 0.8, ampRelease: 0.1, svfCut: 0.8, svfEmph: 0.9, limiterPre: 1.5,
+    fxActive: true, svfActive: true, oscActive: true, volume: 1.0
+  }
+};
+
+export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBatchUpdate, onAudition }: ChannelSettingsDialogProps) {
+  const [userPresets, setUserPresets] = useState<Preset[]>([]);
+  const [configFileName, setConfigFileName] = useState('');
+
+  useEffect(() => {
+    setUserPresets(db.getPresets());
+  }, []);
+
+  const applyPreset = (presetSettings: Partial<ChannelSettings>) => {
+    // Sanitize values to prevent NaN issues
+    const sanitized: Partial<ChannelSettings> = {};
+    Object.keys(presetSettings).forEach(key => {
+      const val = (presetSettings as any)[key];
+      if (typeof val === 'number') {
+        sanitized[key as keyof ChannelSettings] = isNaN(val) ? 0 : val;
+      } else {
+        sanitized[key as keyof ChannelSettings] = val;
+      }
+    });
+    onBatchUpdate(sanitized);
+    toast({ title: "Signal Profile Applied" });
+  };
+
+  const handleExportConfig = () => {
+    try {
+      const data = {
+        type: "DROPIT_CONFIG",
+        version: "1.0",
+        timestamp: Date.now(),
+        settings: { ...s }
+      };
+      
+      const jsonString = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const fileName = `${(configFileName || `signal_ch_${channelIdx}`).toLowerCase().replace(/\s+/g, '_')}.json`;
+      
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = fileName;
+      
+      document.body.appendChild(a);
+      a.click();
+      
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 0);
+      
+      toast({ title: "Config Saved to Device", description: `Exported as ${fileName}` });
+    } catch (err) {
+      console.error("Export Error:", err);
+      toast({ title: "Export Failed", variant: "destructive" });
+    }
+  };
+
+  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.type !== "DROPIT_CONFIG" && data.type !== "DROPIT_PRESET") {
+           // Fallback for raw objects
+           if (data.volume !== undefined || data.oscActive !== undefined) {
+             applyPreset(data);
+             toast({ title: "Raw Config Loaded" });
+             return;
+           }
+           throw new Error("Invalid Format");
+        }
+        applyPreset(data.settings);
+        toast({ title: "Signal Loaded from Disk" });
+      } catch (err) {
+        console.error("Import Error:", err);
+        toast({ title: "Import Error", description: "Unsupported config schema.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const SectionHeader = ({ title, icon: Icon, activeKey, description }: { title: string, icon: any, activeKey: keyof ChannelSettings, description: string }) => (
+    <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col">
+        <h4 className="text-[11px] font-black uppercase text-primary tracking-[0.4em] flex items-center gap-3">
+          <Icon className="w-4 h-4" /> {title}
+        </h4>
+        <span className="text-[9px] font-black text-muted-foreground uppercase mt-1">{description}</span>
+      </div>
+      <div className="flex items-center gap-3 bg-black/40 px-4 py-2 rounded-xl border border-white/5">
+        <span className={cn("text-[8px] font-black uppercase tracking-widest", s[activeKey] ? "text-primary" : "text-muted-foreground")}>
+          {s[activeKey] ? 'ACTIVE' : 'BYPASS'}
+        </span>
+        <Switch 
+          checked={!!s[activeKey]} 
+          onCheckedChange={(checked) => onUpdate(activeKey, checked)}
+          className="data-[state=checked]:bg-primary"
+        />
+      </div>
+    </div>
+  );
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -28,152 +162,275 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
           <Sliders className="w-5 h-5" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl glass-panel border-primary/20 rounded-[3rem] p-12 gold-shadow">
+      <DialogContent className="max-w-6xl glass-panel border-primary/20 rounded-[3rem] p-12 gold-shadow">
         <DialogHeader>
-          <DialogTitle className="text-4xl font-black italic text-primary tracking-tighter uppercase flex items-center justify-between">
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-4xl font-black italic text-primary tracking-tighter uppercase flex items-center gap-4">
+              <Box className="w-8 h-8" /> SAMPLER_LAB
+            </DialogTitle>
+            
             <div className="flex items-center gap-4">
-              <Maximize2 className="w-8 h-8" /> Sampler_Lab
-            </div>
-            <span className="text-[10px] tracking-[0.4em] font-black text-primary/40">Channel_{channelIdx}</span>
-          </DialogTitle>
-        </DialogHeader>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 py-10 max-h-[60vh] overflow-y-scroll pr-4 custom-scrollbar">
-          {/* Signal Modifiers */}
-          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
-            <div className="absolute top-0 right-0 p-4">
-              <Waves className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
-            </div>
-            <div className="flex justify-between items-center">
-              <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Signal_Modifiers</h4>
-              <div className="flex items-center gap-3">
-                <Label className="text-[9px] font-black uppercase">Reverse</Label>
-                <Switch checked={s.reversed} onCheckedChange={(v) => onUpdate('reversed', v)} />
-              </div>
-            </div>
-            <VisualTrim start={s.trimStart} end={s.trimEnd} />
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                  <span>Trim_Start</span>
-                  <span className="text-primary">{Math.round(s.trimStart * 100)}%</span>
-                </div>
-                <Slider value={[s.trimStart * 100]} onValueChange={(v) => onUpdate('trimStart', v[0] / 100)} />
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                  <span>Trim_End</span>
-                  <span className="text-primary">{Math.round(s.trimEnd * 100)}%</span>
-                </div>
-                <Slider value={[s.trimEnd * 100]} onValueChange={(v) => onUpdate('trimEnd', v[0] / 100)} />
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                  <span>Auto_Tune</span>
-                  <span className="text-primary">{Math.round(s.autoTune * 100)}%</span>
-                </div>
-                <Slider value={[s.autoTune * 100]} onValueChange={(v) => onUpdate('autoTune', v[0] / 100)} />
-              </div>
-            </div>
-          </div>
-
-          {/* Envelope Dynamics */}
-          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
-            <div className="absolute top-0 right-0 p-4">
-              <Timer className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
-            </div>
-            <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Envelope_Dynamics</h4>
-            <VisualEnvelope attack={s.attack} release={s.release} />
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                  <span>Attack</span>
-                  <span className="text-primary">{s.attack.toFixed(2)}s</span>
-                </div>
-                <Slider value={[s.attack * 100]} max={200} onValueChange={(v) => onUpdate('attack', v[0] / 100)} />
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                  <span>Release</span>
-                  <span className="text-primary">{s.release.toFixed(2)}s</span>
-                </div>
-                <Slider value={[s.release * 100]} max={200} onValueChange={(v) => onUpdate('release', v[0] / 100)} />
-              </div>
-            </div>
-          </div>
-
-          {/* Harmonics */}
-          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
-            <div className="absolute top-0 right-0 p-4">
-              <Sparkles className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
-            </div>
-            <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Harmonics</h4>
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                  <span>Pitch</span>
-                  <span className="text-primary">{s.pitch.toFixed(2)}x</span>
-                </div>
-                <Slider value={[s.pitch * 50]} min={25} max={200} onValueChange={(v) => onUpdate('pitch', v[0] / 50)} />
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                  <span>Cutoff</span>
-                  <span className="text-primary">{Math.round(s.cutoff * 100)}%</span>
-                </div>
-                <Slider value={[s.cutoff * 100]} onValueChange={(v) => onUpdate('cutoff', v[0] / 100)} />
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                  <span>Distortion</span>
-                  <span className="text-primary">{Math.round(s.distortion * 100)}%</span>
-                </div>
-                <Slider value={[s.distortion * 100]} onValueChange={(v) => onUpdate('distortion', v[0] / 100)} />
-              </div>
-            </div>
-          </div>
-
-          {/* Spatial Field */}
-          <div className="space-y-8 bg-black/40 p-8 rounded-[3rem] border border-white/5 relative group">
-            <div className="absolute top-0 right-0 p-4">
-              <ArrowRightLeft className="w-4 h-4 text-primary/10 group-hover:text-primary/40 transition-colors" />
-            </div>
-            <h4 className="text-[10px] font-black uppercase text-primary tracking-widest">Spatial_Field</h4>
-            <div className="space-y-6">
-              <div className="space-y-3">
-                <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                  <span>Panning</span>
-                  <span className="text-primary">{s.pan.toFixed(2)}</span>
-                </div>
-                <Slider value={[s.pan * 50 + 50]} min={0} max={100} onValueChange={(v) => onUpdate('pan', (v[0] - 50) / 50)} />
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between text-[9px] font-black uppercase text-muted-foreground">
-                  <span>Delay_Send</span>
-                  <span className="text-primary">{Math.round(s.delay * 100)}%</span>
-                </div>
-                <Slider value={[s.delay * 100]} onValueChange={(v) => onUpdate('delay', v[0] / 100)} />
-              </div>
-              <div className="pt-6">
-                <Button 
-                  className="w-full h-20 rounded-[1.5rem] bg-primary text-black font-black uppercase tracking-[0.3em] hover:bg-primary/90 shadow-2xl transition-all"
-                  onClick={onAudition}
-                >
-                  <Play className="w-6 h-6 mr-3 fill-current" /> Audition_Signal
+              <div className="flex items-center gap-2 bg-black/20 p-2 rounded-2xl border border-white/5">
+                <Input 
+                  value={configFileName}
+                  onChange={(e) => setConfigFileName(e.target.value.toUpperCase())}
+                  placeholder="CONFIG_NAME"
+                  className="bg-transparent border-none h-10 w-40 text-[10px] font-black uppercase tracking-widest text-primary focus-visible:ring-0"
+                />
+                <Button onClick={handleExportConfig} className="bg-primary text-black h-10 rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
+                  <FileDown className="w-4 h-4 mr-2" /> Save_to_Disk
                 </Button>
               </div>
+
+              <div className="relative">
+                <input type="file" accept=".json" onChange={handleImportConfig} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                <Button variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
+                  <FileUp className="w-4 h-4 mr-2" /> Load_from_Disk
+                </Button>
+              </div>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
+                    <Library className="w-4 h-4 mr-2" /> Preset_Library
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="glass-panel border-primary/20 rounded-2xl min-w-[240px] max-h-[400px] overflow-y-auto">
+                  <div className="px-4 py-2 text-[8px] font-black text-muted-foreground uppercase tracking-widest">Factory_Standards</div>
+                  {Object.keys(FACTORY_PRESETS).map(name => (
+                    <DropdownMenuItem 
+                      key={name} 
+                      className="focus:bg-primary/10 rounded-xl cursor-pointer font-black text-[9px] uppercase tracking-widest p-4"
+                      onClick={() => applyPreset(FACTORY_PRESETS[name])}
+                    >
+                      {name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
-        </div>
-        
-        <DialogFooter className="pt-8 border-t border-white/5">
-          <Button 
-            className="w-full h-14 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.4em] hover:bg-primary hover:text-black transition-all"
-            onClick={() => toast({ title: "Neural Synchronization Complete" })}
-          >
-            Commit_Changes
-          </Button>
-        </DialogFooter>
+        </DialogHeader>
+
+        <Tabs defaultValue="osc" className="mt-8">
+          <TabsList className="bg-black/40 p-2 rounded-2xl mb-8 flex justify-start gap-2 border border-white/5 h-auto">
+            {['osc', 'amp', 'svf', 'lfo', 'fx'].map((tab) => (
+              <TabsTrigger 
+                key={tab} 
+                value={tab} 
+                className={cn(
+                  "rounded-xl font-black text-[10px] uppercase tracking-widest py-3 px-6 data-[state=active]:bg-primary data-[state=active]:text-black flex items-center gap-2",
+                  !s[`${tab}Active` as keyof ChannelSettings] && "opacity-50"
+                )}
+              >
+                {tab === 'fx' ? 'FX_LMT' : tab.toUpperCase()}
+                {!s[`${tab}Active` as keyof ChannelSettings] && <ZapOff className="w-3 h-3 text-red-500" />}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 h-[55vh] overflow-y-auto pr-4 custom-scrollbar">
+            <div className="md:col-span-8">
+              <TabsContent value="osc" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
+                 <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.oscActive && "opacity-30")}>
+                    <SectionHeader title="OSCILLATOR_SOURCE" icon={Radio} activeKey="oscActive" description="Sample_Engine" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-12">
+                       <div className="space-y-6">
+                          <div className="space-y-4">
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Coarse_Tune</Label>
+                             <Slider disabled={!s.oscActive} value={[s.oscCoarse || 0]} min={-24} max={24} step={1} onValueChange={(v) => onUpdate('oscCoarse', v[0])} />
+                             <div className="text-[10px] font-black text-primary text-right">{((s.oscCoarse || 0) > 0) ? `+${s.oscCoarse}` : (s.oscCoarse || 0)} ST</div>
+                          </div>
+                          <div className="space-y-4">
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Fine_Tune</Label>
+                             <Slider disabled={!s.oscActive} value={[s.oscFine || 0]} min={-100} max={100} step={1} onValueChange={(v) => onUpdate('oscFine', v[0])} />
+                             <div className="text-[10px] font-black text-primary text-right">{((s.oscFine || 0) > 0) ? `+${s.oscFine}` : (s.oscFine || 0)} C</div>
+                          </div>
+                       </div>
+                       <div className="space-y-8">
+                          <div className="space-y-4">
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Phase_Width</Label>
+                             <Slider disabled={!s.oscActive} value={[(s.oscPw || 0) * 100]} onValueChange={(v) => onUpdate('oscPw', v[0] / 100)} />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                             <div className="space-y-4">
+                                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">LFO_Mod</Label>
+                                <Slider disabled={!s.oscActive} value={[(s.oscLfo || 0) * 100]} onValueChange={(v) => onUpdate('oscLfo', v[0] / 100)} />
+                             </div>
+                             <div className="space-y-4">
+                                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Env_Mod</Label>
+                                <Slider disabled={!s.oscActive} value={[(s.oscEnv || 0) * 100]} onValueChange={(v) => onUpdate('oscEnv', v[0] / 100)} />
+                             </div>
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+              </TabsContent>
+
+              <TabsContent value="amp" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
+                <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.ampActive && "opacity-30")}>
+                   <SectionHeader title="AMPLIFIER_AHDSR" icon={Waves} activeKey="ampActive" description="Output_Envelope" />
+                   
+                   <div className="grid grid-cols-1 gap-8">
+                      {['Attack', 'Decay', 'Sustain', 'Release'].map((stage) => {
+                        const key = `amp${stage}` as keyof ChannelSettings;
+                        const val = (s as any)[key] || 0;
+                        return (
+                          <div key={stage} className="space-y-3">
+                            <div className="flex justify-between items-center px-1">
+                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{stage}</Label>
+                              <span className="text-[10px] font-black text-primary">{(val || 0).toFixed(2)}s</span>
+                            </div>
+                            <Slider 
+                              disabled={!s.ampActive}
+                              value={[(val || 0) * 100]} 
+                              max={stage === 'Sustain' ? 100 : 300} 
+                              onValueChange={(v) => onUpdate(key, v[0] / 100)} 
+                            />
+                          </div>
+                        );
+                      })}
+                   </div>
+                   
+                   <div className="pt-8 border-t border-white/5">
+                    {s.ampActive && <VisualEnvelope attack={s.ampAttack} release={s.ampRelease} />}
+                   </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="svf" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
+                 <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.svfActive && "opacity-30")}>
+                    <SectionHeader title="STATE_VARIABLE_FILTER" icon={Activity} activeKey="svfActive" description="Acoustic_Model" />
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                       <div className="space-y-8">
+                          {s.svfActive && <VisualFilterCurve cutoff={s.svfCut} resonance={s.svfEmph} type={s.svfType} />}
+                          <div className="grid grid-cols-2 gap-8">
+                             <div className="space-y-4">
+                                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cutoff</Label>
+                                <Slider disabled={!s.svfActive} value={[(s.svfCut || 1) * 100]} onValueChange={(v) => onUpdate('svfCut', v[0] / 100)} />
+                             </div>
+                             <div className="space-y-4">
+                                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Resonance</Label>
+                                <Slider disabled={!s.svfActive} value={[(s.svfEmph || 0.2) * 100]} onValueChange={(v) => onUpdate('svfEmph', v[0] / 100)} />
+                             </div>
+                          </div>
+                       </div>
+                       <div className="space-y-6">
+                          <div className="flex gap-2 mb-4">
+                            {['lowpass', 'highpass', 'bandpass'].map(type => (
+                               <Button 
+                                 key={type} 
+                                 disabled={!s.svfActive}
+                                 variant="outline" 
+                                 size="sm" 
+                                 className={cn("h-8 text-[8px] font-black uppercase rounded-lg border-primary/20", s.svfType === type ? "bg-primary text-black" : "bg-black/40 text-primary/40")}
+                                 onClick={() => onUpdate('svfType', type)}
+                               >
+                                 {type.slice(0, 4)}
+                               </Button>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                             <div className="space-y-4">
+                                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Env_Depth</Label>
+                                <Slider disabled={!s.svfActive} value={[(s.svfEnv || 0) * 100]} onValueChange={(v) => onUpdate('svfEnv', v[0] / 100)} />
+                             </div>
+                             <div className="space-y-4">
+                                <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">KB_Track</Label>
+                                <Slider disabled={!s.svfActive} value={[(s.svfKb || 0) * 100]} onValueChange={(v) => onUpdate('svfKb', v[0] / 100)} />
+                             </div>
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+              </TabsContent>
+
+              <TabsContent value="lfo" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
+                 <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.lfoActive && "opacity-30")}>
+                    <SectionHeader title="MODULATION_LFO" icon={Zap} activeKey="lfoActive" description="Signal_Mod" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-12">
+                       <div className="space-y-8">
+                          <div className="space-y-4">
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Rate</Label>
+                             <Slider disabled={!s.lfoActive} value={[(s.lfoRate || 1) * 100]} max={2000} onValueChange={(v) => onUpdate('lfoRate', v[0] / 100)} />
+                             <div className="text-[10px] font-black text-primary text-right">{((s.lfoRate || 1) * 10).toFixed(1)} Hz</div>
+                          </div>
+                          <div className="space-y-4">
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Delay</Label>
+                             <Slider disabled={!s.lfoActive} value={[(s.lfoDelay || 0) * 100]} onValueChange={(v) => onUpdate('lfoDelay', v[0] / 100)} />
+                          </div>
+                       </div>
+                       <div className="bg-white/5 p-8 rounded-3xl border border-white/5">
+                          <Label className="text-[8px] font-black uppercase tracking-[0.3em] text-primary/40 block mb-4">WAVEFORM_MONITOR</Label>
+                          {s.lfoActive && <VisualLFO rate={s.lfoRate} delay={s.lfoDelay} />}
+                       </div>
+                    </div>
+                 </div>
+              </TabsContent>
+
+              <TabsContent value="fx" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
+                 <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 grid grid-cols-2 gap-12 transition-opacity", !s.fxActive && "opacity-30")}>
+                    <div className="space-y-8">
+                       <SectionHeader title="FX_CHAIN" icon={Layers} activeKey="fxActive" description="Harmonic_Chain" />
+                       <div className="space-y-6">
+                          <div className="space-y-4">
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Unison_Spread</Label>
+                             <Slider disabled={!s.fxActive} value={[(s.unison || 0) * 100]} onValueChange={(v) => onUpdate('unison', v[0] / 100)} />
+                          </div>
+                          <div className="space-y-4">
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Distortion</Label>
+                             <Slider disabled={!s.fxActive} value={[(s.distortion || 0) * 100]} onValueChange={(v) => onUpdate('distortion', v[0] / 100)} />
+                          </div>
+                       </div>
+                    </div>
+                    <div className="space-y-8 border-l border-white/5 pl-12">
+                       <h4 className="text-[11px] font-black uppercase text-primary tracking-[0.4em] flex items-center gap-3">
+                         <ZapOff className="w-4 h-4" /> MASTER_LIMITER
+                       </h4>
+                       <div className="space-y-6">
+                          <div className="space-y-4">
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pre_Gain</Label>
+                             <Slider disabled={!s.fxActive} value={[(s.limiterPre || 1) * 100]} max={200} onValueChange={(v) => onUpdate('limiterPre', v[0] / 100)} />
+                          </div>
+                          <div className="space-y-4">
+                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Mix</Label>
+                             <Slider disabled={!s.fxActive} value={[(s.limiterMix || 0) * 100]} onValueChange={(v) => onUpdate('limiterMix', v[0] / 100)} />
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+              </TabsContent>
+            </div>
+
+            <div className="md:col-span-4 space-y-8">
+               <div className="glass-panel p-8 rounded-[2.5rem] space-y-8 bg-black/60 gold-border">
+                  <div className="flex items-center gap-3 text-primary">
+                    <Settings2 className="w-5 h-5" />
+                    <span className="font-black text-[10px] tracking-[0.3em] uppercase">MONITORING</span>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex justify-between items-center">
+                       <span className="text-[9px] font-black text-muted-foreground uppercase">Out_Level</span>
+                       <span className="text-[10px] font-black text-primary">{Math.round((s.volume || 0.8) * 100)}%</span>
+                    </div>
+                    <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex justify-between items-center">
+                       <span className="text-[9px] font-black text-muted-foreground uppercase">Engine_Clock</span>
+                       <span className="text-[10px] font-black text-primary">44.1 KHZ</span>
+                    </div>
+                  </div>
+
+                  <Button 
+                    className="w-full h-20 rounded-[2rem] bg-primary text-black font-black uppercase tracking-[0.4em] text-xs hover:bg-primary/90 shadow-2xl transition-all hover:scale-[1.02] active:scale-95"
+                    onClick={onAudition}
+                  >
+                    <Play className="w-6 h-6 mr-4 fill-current" /> AUDITION
+                  </Button>
+               </div>
+            </div>
+          </div>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
