@@ -237,36 +237,26 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   }, [isPlaying, scheduleNextNote, initAudioContext]);
 
   const randomizePattern = () => {
-    const channelsToRandomize = Object.keys(selectedClipsForChannel).filter(ch => !!selectedClipsForChannel[ch]);
-    
-    if (channelsToRandomize.length === 0) {
-      toast({ title: "No Clips Assigned", description: "Select a clip for at least one track first.", variant: "destructive" });
+    const activeChannels = Object.keys(selectedClipsForChannel).filter(ch => !!selectedClipsForChannel[ch]);
+    if (activeChannels.length === 0) {
+      toast({ title: "No Tracks Active", description: "Select a clip for at least one track first.", variant: "destructive" });
       return;
     }
 
     const newGrid: Record<string, string[]> = { ...grid };
-    
-    // Clear existing steps for channels being randomized
-    Object.keys(newGrid).forEach(key => {
-      const [ch] = key.split('-');
-      if (channelsToRandomize.includes(ch)) {
-        delete newGrid[key];
-      }
-    });
-
-    let channelsUpdated = 0;
-    channelsToRandomize.forEach(ch => {
+    activeChannels.forEach(ch => {
       const clipId = selectedClipsForChannel[ch];
       for (let s = 0; s < numSteps; s++) {
         if (Math.random() > 0.8) {
           newGrid[`${ch}-${s}`] = [clipId];
+        } else if (Math.random() > 0.9) {
+           delete newGrid[`${ch}-${s}`];
         }
       }
-      channelsUpdated++;
     });
 
     setGrid(newGrid);
-    toast({ title: "Pattern Generated", description: `Updated ${channelsUpdated} active tracks.` });
+    toast({ title: "Pattern Randomized", description: `Updated ${activeChannels.length} active tracks.` });
   };
 
   const shiftPattern = (direction: 'left' | 'right') => {
@@ -394,15 +384,32 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
-        if (data.type !== "DROPIT_PROJECT") throw new Error("Invalid Format");
-        data.clips.forEach((clip: AudioClip) => db.saveClip({ ...clip, userId: user.id }));
-        const importedTrack = { ...data.track, userId: user.id, id: crypto.randomUUID(), title: `IMPORTED_${data.track.title}` };
+        // Flexible DAW Import Layer
+        if (data.type !== "DROPIT_PROJECT" && !data.patterns) throw new Error("Unsupported Format");
+        
+        if (data.clips) {
+           data.clips.forEach((clip: AudioClip) => db.saveClip({ ...clip, userId: user.id }));
+        }
+        
+        const importedTrack = { 
+          id: crypto.randomUUID(),
+          userId: user.id,
+          title: `IMPORTED_${data.track?.title || 'DAW_PATTERN'}`,
+          bpm: data.track?.bpm || data.bpm || 120,
+          numChannels: data.track?.numChannels || data.numChannels || 4,
+          numSteps: data.track?.numSteps || data.numSteps || 16,
+          grid: data.track?.grid || data.grid || {},
+          channelSettings: data.track?.channelSettings || data.channelSettings || {},
+          selectedClips: data.track?.selectedClips || data.selectedClips || {},
+          createdAt: Date.now()
+        };
+        
         db.saveTrack(importedTrack);
-        toast({ title: "Project Imported" });
+        toast({ title: "DAW Config Imported" });
         if (onImportRefresh) onImportRefresh();
         window.location.href = `/studio?id=${importedTrack.id}`;
       } catch (err) {
-        toast({ title: "Import Failed", variant: "destructive" });
+        toast({ title: "Import Failed", description: "Unknown config schema.", variant: "destructive" });
       }
     };
     reader.readAsText(file);
@@ -435,9 +442,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       a.download = `${title.replace(/\s+/g, '_')}_Master.wav`;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: "Audio Mastered" });
+      toast({ title: "Master Export Complete" });
     } catch (err) {
-      toast({ title: "Mastering Failed", variant: "destructive" });
+      toast({ title: "Export Failed", variant: "destructive" });
     } finally {
       setIsExporting(false);
     }
@@ -474,10 +481,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
             <div className="flex flex-col md:flex-row items-center gap-8">
                <div className="flex items-center gap-4 h-[60] rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full bg-black/20">
                    <MasterVisualizer analyser={masterAnalyserRef.current} />
-                  {/* <div className="flex items-center gap-2 px-4 border-r border-primary/10">
-                    <Gauge className="w-5 h-5 text-primary" />
-                    <span className="text-[9px] font-black uppercase tracking-widest text-primary">Grid Tools</span>
-                  </div> */}
                   <div className="flex gap-2">
                     <Button variant="ghost" size="sm" onClick={randomizePattern} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary border border-primary/10 gap-2">
                       <Dices className="w-3.5 h-3.5" /> Randomize
@@ -491,9 +494,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                     <Button variant="ghost" size="sm" onClick={clearGrid} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-500 border border-red-500/20 gap-2"><X className="w-3.5 h-3.5" /> Clear</Button>
                   </div>
                </div>
-               {/* <div className="w-full md:w-64">
-                  <MasterVisualizer analyser={masterAnalyserRef.current} />
-               </div> */}
             </div>
           </div>
 
@@ -579,7 +579,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                     value={selId}
                     onChange={(e) => setSelectedClipsForChannel(p => ({ ...p, [chKey]: e.target.value }))}
                   >
-                    <option value="" className="bg-black">SELECT_SIGNAL</option>
+                    <option value="" className="bg-black">SELECT_CLIP</option>
                     {clips.map(c => <option key={c.id} value={c.id} className="bg-black">{c.name}</option>)}
                   </select>
                   <div className="flex items-center gap-4">
@@ -656,13 +656,14 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                    <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-red-500/40" onClick={() => removeChannel(chIdx)}><Trash2 className="w-4 h-4" /></Button>
                 </div>
               </div>
-              <div className="flex-1 flex gap-3 h-[120px] items-center overflow-x-auto pb-4">
+              <div className="flex-1 flex gap-2 h-[120px] items-center overflow-x-auto pb-4 custom-scrollbar">
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const clipIds = grid[`${chIdx}-${stepIdx}`] || [];
                   const clip = clips.find(c => c.id === clipIds[0]);
                   const char = CHARACTER_TYPES.find(ct => ct.id === clip?.characterType);
                   const CharIcon = char?.icon;
                   const isCurrent = stepIdx === currentStep;
+                  const isGroupStart = stepIdx % 4 === 0;
                   return (
                     <button
                       key={stepIdx}
@@ -681,13 +682,14 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                         setGrid(ng);
                       }}
                       className={cn(
-                        "w-16 h-[80%] rounded-2xl transition-all duration-300 flex items-center justify-center relative shrink-0",
-                        clip ? `${s.color} shadow-2xl brightness-125` : "bg-neutral-800/40 border border-white/5",
-                        isCurrent ? "ring-4 ring-primary/40 scale-110 z-10" : "scale-100"
+                        "w-12 h-[80%] rounded-xl transition-all duration-300 flex items-center justify-center relative shrink-0",
+                        clip ? `${s.color} shadow-2xl brightness-125` : "bg-neutral-800/40 border border-white/5 hover:bg-neutral-800",
+                        isCurrent ? "ring-2 ring-primary scale-105 z-10" : "scale-100",
+                        isGroupStart ? "ml-4 first:ml-0" : ""
                       )}
                     >
-                      {CharIcon && <CharIcon className={cn("w-7 h-7 text-black")} />}
-                      {stepIdx % 4 === 0 && !clip && <div className="absolute bottom-2 w-1 h-1 bg-white/20 rounded-full" />}
+                      {CharIcon && <CharIcon className={cn("w-6 h-6 text-black")} />}
+                      {stepIdx % 4 === 0 && !clip && <div className="absolute -bottom-1 w-full h-0.5 bg-primary/20 rounded-full" />}
                     </button>
                   );
                 })}
