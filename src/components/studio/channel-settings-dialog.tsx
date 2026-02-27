@@ -5,7 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Play, Maximize2, Waves, Timer, Sparkles, Sliders, Zap, 
   Waveform, Music, Box, Settings2, Trash2, Library, Wand2,
-  Activity, Radio, ZapOff, Layers, Power, Save, Plus
+  Activity, Radio, ZapOff, Layers, Power, Save, Plus,
+  FileDown, FileUp, Download, Upload
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
@@ -31,16 +32,16 @@ const FACTORY_PRESETS: Record<string, Partial<ChannelSettings>> = {
   PUNCHY_KICK: {
     ampAttack: 0.01, ampDecay: 0.1, ampSustain: 0, ampRelease: 0.05,
     svfCut: 0.1, svfEmph: 0.2, svfType: 'lowpass', limiterPre: 1.2,
-    svfActive: true, ampActive: true, fxActive: true
+    svfActive: true, ampActive: true, fxActive: true, oscActive: true
   },
   VAPOR_CHORD: {
     ampAttack: 1.2, ampDecay: 0.8, ampSustain: 0.7, ampRelease: 1.5,
     svfCut: 0.4, svfEmph: 0.6, svfType: 'bandpass', lfoRate: 0.3, oscLfo: 0.2,
-    svfActive: true, ampActive: true, lfoActive: true
+    svfActive: true, ampActive: true, lfoActive: true, oscActive: true
   },
   INDUSTRIAL_HIT: {
     distortion: 0.8, ampRelease: 0.1, svfCut: 0.8, svfEmph: 0.9, limiterPre: 1.5,
-    fxActive: true, svfActive: true
+    fxActive: true, svfActive: true, oscActive: true
   }
 };
 
@@ -55,7 +56,10 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
 
   const applyPreset = (presetSettings: Partial<ChannelSettings>) => {
     Object.entries(presetSettings).forEach(([key, val]) => {
-      onUpdate(key as keyof ChannelSettings, val);
+      // Ensure we only update valid keys
+      if (key in s) {
+        onUpdate(key as keyof ChannelSettings, val);
+      }
     });
     toast({ title: "Signal Profile Applied" });
   };
@@ -72,6 +76,40 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
     setNewPresetName('');
     setShowSaveInput(false);
     toast({ title: "Preset Saved to Library" });
+  };
+
+  const handleExportPresetFile = () => {
+    const data = {
+      type: "DROPIT_PRESET",
+      version: "1.0",
+      name: newPresetName || `CHANNEL_${channelIdx}_CONFIG`,
+      settings: s
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(newPresetName || `preset_ch_${channelIdx}`).toLowerCase()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Config Exported to Disk" });
+  };
+
+  const handleImportPresetFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.type !== "DROPIT_PRESET") throw new Error("Invalid Format");
+        applyPreset(data.settings);
+        toast({ title: "Disk Config Loaded" });
+      } catch (err) {
+        toast({ title: "Import Error", description: "Unsupported config schema.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
   };
 
   const deleteUserPreset = (id: string, e: React.MouseEvent) => {
@@ -124,23 +162,36 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                       placeholder="PRESET_NAME"
                       className="bg-black/40 border-primary/20 h-12 w-48 text-[10px] font-black uppercase tracking-widest text-primary"
                     />
-                    <Button onClick={handleSavePreset} className="bg-primary text-black h-12 rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
-                      Save
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button onClick={handleSavePreset} className="bg-primary text-black h-12 rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
+                        <Save className="w-3.5 h-3.5 mr-2" /> Save
+                      </Button>
+                      <Button onClick={handleExportPresetFile} variant="outline" className="border-primary/20 bg-black/40 h-12 rounded-xl font-black uppercase text-[10px] tracking-widest px-4 text-primary">
+                        <FileDown className="w-3.5 h-3.5 mr-2" /> Disk
+                      </Button>
+                    </div>
                     <Button variant="ghost" onClick={() => setShowSaveInput(false)} className="text-muted-foreground h-12">
                       Cancel
                     </Button>
                  </div>
                ) : (
-                 <Button onClick={() => setShowSaveInput(true)} variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
-                   <Save className="w-4 h-4 mr-2" /> Save_Preset
-                 </Button>
+                 <div className="flex items-center gap-2">
+                    <Button onClick={() => setShowSaveInput(true)} variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
+                      <Save className="w-4 h-4 mr-2" /> Preset_Lab
+                    </Button>
+                    <div className="relative">
+                      <input type="file" accept=".json" onChange={handleImportPresetFile} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                      <Button variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
+                        <FileUp className="w-4 h-4 mr-2" /> Import_Disk
+                      </Button>
+                    </div>
+                 </div>
                )}
 
                <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
-                    <Wand2 className="w-4 h-4 mr-2" /> Load_Preset
+                    <Wand2 className="w-4 h-4 mr-2" /> Load_Library
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="glass-panel border-primary/20 rounded-2xl min-w-[240px] max-h-[400px] overflow-y-auto">
@@ -209,28 +260,28 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                        <div className="space-y-6">
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Coarse_Tune (Semi)</Label>
-                             <Slider disabled={!s.oscActive} value={[s.oscCoarse]} min={-24} max={24} step={1} onValueChange={(v) => onUpdate('oscCoarse', v[0])} />
-                             <div className="text-[10px] font-black text-primary text-right">{s.oscCoarse > 0 ? `+${s.oscCoarse}` : s.oscCoarse} ST</div>
+                             <Slider disabled={!s.oscActive} value={[s.oscCoarse || 0]} min={-24} max={24} step={1} onValueChange={(v) => onUpdate('oscCoarse', v[0])} />
+                             <div className="text-[10px] font-black text-primary text-right">{((s.oscCoarse || 0) > 0) ? `+${s.oscCoarse}` : (s.oscCoarse || 0)} ST</div>
                           </div>
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Fine_Tune (Cents)</Label>
-                             <Slider disabled={!s.oscActive} value={[s.oscFine]} min={-100} max={100} step={1} onValueChange={(v) => onUpdate('oscFine', v[0])} />
-                             <div className="text-[10px] font-black text-primary text-right">{s.oscFine > 0 ? `+${s.oscFine}` : s.oscFine} C</div>
+                             <Slider disabled={!s.oscActive} value={[s.oscFine || 0]} min={-100} max={100} step={1} onValueChange={(v) => onUpdate('oscFine', v[0])} />
+                             <div className="text-[10px] font-black text-primary text-right">{((s.oscFine || 0) > 0) ? `+${s.oscFine}` : (s.oscFine || 0)} C</div>
                           </div>
                        </div>
                        <div className="space-y-8">
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">PW / Phase_Width</Label>
-                             <Slider disabled={!s.oscActive} value={[s.oscPw * 100]} onValueChange={(v) => onUpdate('oscPw', v[0] / 100)} />
+                             <Slider disabled={!s.oscActive} value={[(s.oscPw || 0) * 100]} onValueChange={(v) => onUpdate('oscPw', v[0] / 100)} />
                           </div>
                           <div className="grid grid-cols-2 gap-4">
                              <div className="space-y-4">
                                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">LFO_Mod</Label>
-                                <Slider disabled={!s.oscActive} value={[s.oscLfo * 100]} onValueChange={(v) => onUpdate('oscLfo', v[0] / 100)} />
+                                <Slider disabled={!s.oscActive} value={[(s.oscLfo || 0) * 100]} onValueChange={(v) => onUpdate('oscLfo', v[0] / 100)} />
                              </div>
                              <div className="space-y-4">
                                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Env_Mod</Label>
-                                <Slider disabled={!s.oscActive} value={[s.oscEnv * 100]} onValueChange={(v) => onUpdate('oscEnv', v[0] / 100)} />
+                                <Slider disabled={!s.oscActive} value={[(s.oscEnv || 0) * 100]} onValueChange={(v) => onUpdate('oscEnv', v[0] / 100)} />
                              </div>
                           </div>
                        </div>
@@ -242,7 +293,7 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                 <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.ampActive && "opacity-30")}>
                    <SectionHeader title="AMPLIFIER_AHDSR" icon={Waves} activeKey="ampActive" description="Output_Gain_Envelope" />
                    
-                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-10">
+                   <div className="grid grid-cols-1 gap-10">
                       {['Attack', 'Decay', 'Sustain', 'Release'].map((stage) => {
                         const key = `amp${stage}` as keyof ChannelSettings;
                         const val = (s as any)[key] || 0;
@@ -279,11 +330,11 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                           <div className="grid grid-cols-2 gap-8">
                              <div className="space-y-4">
                                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cutoff</Label>
-                                <Slider disabled={!s.svfActive} value={[s.svfCut * 100]} onValueChange={(v) => onUpdate('svfCut', v[0] / 100)} />
+                                <Slider disabled={!s.svfActive} value={[(s.svfCut || 1) * 100]} onValueChange={(v) => onUpdate('svfCut', v[0] / 100)} />
                              </div>
                              <div className="space-y-4">
                                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Emph (Res)</Label>
-                                <Slider disabled={!s.svfActive} value={[s.svfEmph * 100]} onValueChange={(v) => onUpdate('svfEmph', v[0] / 100)} />
+                                <Slider disabled={!s.svfActive} value={[(s.svfEmph || 0.2) * 100]} onValueChange={(v) => onUpdate('svfEmph', v[0] / 100)} />
                              </div>
                           </div>
                        </div>
@@ -305,11 +356,11 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                           <div className="grid grid-cols-2 gap-4">
                              <div className="space-y-4">
                                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Env_Depth</Label>
-                                <Slider disabled={!s.svfActive} value={[s.svfEnv * 100]} onValueChange={(v) => onUpdate('svfEnv', v[0] / 100)} />
+                                <Slider disabled={!s.svfActive} value={[(s.svfEnv || 0) * 100]} onValueChange={(v) => onUpdate('svfEnv', v[0] / 100)} />
                              </div>
                              <div className="space-y-4">
                                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">KB_Tracking</Label>
-                                <Slider disabled={!s.svfActive} value={[s.svfKb * 100]} onValueChange={(v) => onUpdate('svfKb', v[0] / 100)} />
+                                <Slider disabled={!s.svfActive} value={[(s.svfKb || 0) * 100]} onValueChange={(v) => onUpdate('svfKb', v[0] / 100)} />
                              </div>
                           </div>
                        </div>
@@ -324,12 +375,12 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                        <div className="space-y-8">
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Rate (Freq)</Label>
-                             <Slider disabled={!s.lfoActive} value={[s.lfoRate * 100]} max={2000} onValueChange={(v) => onUpdate('lfoRate', v[0] / 100)} />
-                             <div className="text-[10px] font-black text-primary text-right">{(s.lfoRate * 10).toFixed(1)} Hz</div>
+                             <Slider disabled={!s.lfoActive} value={[(s.lfoRate || 1) * 100]} max={2000} onValueChange={(v) => onUpdate('lfoRate', v[0] / 100)} />
+                             <div className="text-[10px] font-black text-primary text-right">{((s.lfoRate || 1) * 10).toFixed(1)} Hz</div>
                           </div>
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Delay (Fade)</Label>
-                             <Slider disabled={!s.lfoActive} value={[s.lfoDelay * 100]} onValueChange={(v) => onUpdate('lfoDelay', v[0] / 100)} />
+                             <Slider disabled={!s.lfoActive} value={[(s.lfoDelay || 0) * 100]} onValueChange={(v) => onUpdate('lfoDelay', v[0] / 100)} />
                           </div>
                        </div>
                        <div className="bg-white/5 p-8 rounded-3xl border border-white/5 space-y-4">
@@ -347,11 +398,11 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                        <div className="space-y-6">
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Unison_Spread</Label>
-                             <Slider disabled={!s.fxActive} value={[s.unison * 100]} onValueChange={(v) => onUpdate('unison', v[0] / 100)} />
+                             <Slider disabled={!s.fxActive} value={[(s.unison || 0) * 100]} onValueChange={(v) => onUpdate('unison', v[0] / 100)} />
                           </div>
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Harmonic_Dist</Label>
-                             <Slider disabled={!s.fxActive} value={[s.distortion * 100]} onValueChange={(v) => onUpdate('distortion', v[0] / 100)} />
+                             <Slider disabled={!s.fxActive} value={[(s.distortion || 0) * 100]} onValueChange={(v) => onUpdate('distortion', v[0] / 100)} />
                           </div>
                        </div>
                     </div>
@@ -362,11 +413,11 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                        <div className="space-y-6">
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pre_Gain</Label>
-                             <Slider disabled={!s.fxActive} value={[s.limiterPre * 100]} max={200} onValueChange={(v) => onUpdate('limiterPre', v[0] / 100)} />
+                             <Slider disabled={!s.fxActive} value={[(s.limiterPre || 1) * 100]} max={200} onValueChange={(v) => onUpdate('limiterPre', v[0] / 100)} />
                           </div>
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Mix</Label>
-                             <Slider disabled={!s.fxActive} value={[s.limiterMix * 100]} onValueChange={(v) => onUpdate('limiterMix', v[0] / 100)} />
+                             <Slider disabled={!s.fxActive} value={[(s.limiterMix || 0) * 100]} onValueChange={(v) => onUpdate('limiterMix', v[0] / 100)} />
                           </div>
                        </div>
                     </div>
@@ -384,7 +435,7 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                   <div className="space-y-4">
                     <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex justify-between items-center">
                        <span className="text-[9px] font-black text-muted-foreground uppercase">Output_Level</span>
-                       <span className="text-[10px] font-black text-primary">{Math.round(s.volume * 100)}%</span>
+                       <span className="text-[10px] font-black text-primary">{Math.round((s.volume || 0) * 100)}%</span>
                     </div>
                     <div className="bg-black/40 p-5 rounded-2xl border border-white/5 flex justify-between items-center">
                        <span className="text-[9px] font-black text-muted-foreground uppercase">Sample_Rate</span>
