@@ -5,12 +5,13 @@ import React from 'react';
 import { 
   Play, Maximize2, Waves, Timer, Sparkles, Sliders, Zap, 
   Waveform, Music, Box, Settings2, Trash2, Library, Wand2,
-  Activity, Radio, ZapOff, Layers
+  Activity, Radio, ZapOff, Layers, Power
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { ChannelSettings } from '@/lib/db';
 import { toast } from '@/hooks/use-toast';
 import { VisualEnvelope, VisualFilterCurve, VisualLFO } from './visualizers';
@@ -28,14 +29,17 @@ interface ChannelSettingsDialogProps {
 const PRESETS: Record<string, Partial<ChannelSettings>> = {
   PUNCHY_KICK: {
     ampAttack: 0.01, ampDecay: 0.1, ampSustain: 0, ampRelease: 0.05,
-    svfCut: 0.1, svfEmph: 0.2, svfType: 'lowpass', limiterPre: 1.2
+    svfCut: 0.1, svfEmph: 0.2, svfType: 'lowpass', limiterPre: 1.2,
+    svfActive: true, ampActive: true, fxActive: true
   },
   VAPOR_CHORD: {
     ampAttack: 1.2, ampDecay: 0.8, ampSustain: 0.7, ampRelease: 1.5,
-    svfCut: 0.4, svfEmph: 0.6, svfType: 'bandpass', lfoRate: 0.3, oscLfo: 0.2
+    svfCut: 0.4, svfEmph: 0.6, svfType: 'bandpass', lfoRate: 0.3, oscLfo: 0.2,
+    svfActive: true, ampActive: true, lfoActive: true
   },
   INDUSTRIAL_HIT: {
-    distortion: 0.8, ampRelease: 0.1, svfCut: 0.8, svfEmph: 0.9, limiterPre: 1.5
+    distortion: 0.8, ampRelease: 0.1, svfCut: 0.8, svfEmph: 0.9, limiterPre: 1.5,
+    fxActive: true, svfActive: true
   }
 };
 
@@ -46,6 +50,27 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
     });
     toast({ title: "Signal Profile Applied" });
   };
+
+  const SectionHeader = ({ title, icon: Icon, activeKey, description }: { title: string, icon: any, activeKey: keyof ChannelSettings, description: string }) => (
+    <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col">
+        <h4 className="text-[11px] font-black uppercase text-primary tracking-[0.4em] flex items-center gap-3">
+          <Icon className="w-4 h-4" /> {title}
+        </h4>
+        <span className="text-[9px] font-black text-muted-foreground uppercase mt-1">{description}</span>
+      </div>
+      <div className="flex items-center gap-3 bg-black/40 px-4 py-2 rounded-xl border border-white/5">
+        <span className={cn("text-[8px] font-black uppercase tracking-widest", s[activeKey] ? "text-primary" : "text-muted-foreground")}>
+          {s[activeKey] ? 'ACTIVE' : 'BYPASS'}
+        </span>
+        <Switch 
+          checked={!!s[activeKey]} 
+          onCheckedChange={(checked) => onUpdate(activeKey, checked)}
+          className="data-[state=checked]:bg-primary"
+        />
+      </div>
+    </div>
+  );
 
   return (
     <Dialog>
@@ -88,50 +113,53 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
 
         <Tabs defaultValue="osc" className="mt-8">
           <TabsList className="bg-black/40 p-2 rounded-2xl mb-8 flex justify-start gap-2 border border-white/5 h-auto">
-            <TabsTrigger value="osc" className="rounded-xl font-black text-[10px] uppercase tracking-widest py-3 px-6 data-[state=active]:bg-primary data-[state=active]:text-black">OSC</TabsTrigger>
-            <TabsTrigger value="amp" className="rounded-xl font-black text-[10px] uppercase tracking-widest py-3 px-6 data-[state=active]:bg-primary data-[state=active]:text-black">AMP</TabsTrigger>
-            <TabsTrigger value="svf" className="rounded-xl font-black text-[10px] uppercase tracking-widest py-3 px-6 data-[state=active]:bg-primary data-[state=active]:text-black">SVF</TabsTrigger>
-            <TabsTrigger value="lfo" className="rounded-xl font-black text-[10px] uppercase tracking-widest py-3 px-6 data-[state=active]:bg-primary data-[state=active]:text-black">LFO</TabsTrigger>
-            <TabsTrigger value="fx" className="rounded-xl font-black text-[10px] uppercase tracking-widest py-3 px-6 data-[state=active]:bg-primary data-[state=active]:text-black">FX/LMT</TabsTrigger>
+            {['osc', 'amp', 'svf', 'lfo', 'fx'].map((tab) => (
+              <TabsTrigger 
+                key={tab} 
+                value={tab} 
+                className={cn(
+                  "rounded-xl font-black text-[10px] uppercase tracking-widest py-3 px-6 data-[state=active]:bg-primary data-[state=active]:text-black flex items-center gap-2",
+                  !s[`${tab}Active` as keyof ChannelSettings] && "opacity-50"
+                )}
+              >
+                {tab === 'fx' ? 'FX/LMT' : tab.toUpperCase()}
+                {!s[`${tab}Active` as keyof ChannelSettings] && <Power className="w-3 h-3 text-red-500" />}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8 h-[55vh] overflow-y-auto pr-4 custom-scrollbar">
             <div className="md:col-span-8">
               {/* OSC CONTENT */}
               <TabsContent value="osc" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
-                 <div className="bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10">
-                    <div className="flex items-center justify-between">
-                       <h4 className="text-[11px] font-black uppercase text-primary tracking-[0.4em] flex items-center gap-3">
-                         <Radio className="w-4 h-4" /> OSCILLATOR_SOURCE
-                       </h4>
-                       <span className="text-[9px] font-black text-muted-foreground uppercase">Sample_Playback_Engine</span>
-                    </div>
+                 <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.oscActive && "opacity-30")}>
+                    <SectionHeader title="OSCILLATOR_SOURCE" icon={Radio} activeKey="oscActive" description="Sample_Playback_Engine" />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-12">
                        <div className="space-y-6">
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Coarse_Tune (Semi)</Label>
-                             <Slider value={[s.oscCoarse]} min={-24} max={24} step={1} onValueChange={(v) => onUpdate('oscCoarse', v[0])} />
+                             <Slider disabled={!s.oscActive} value={[s.oscCoarse]} min={-24} max={24} step={1} onValueChange={(v) => onUpdate('oscCoarse', v[0])} />
                              <div className="text-[10px] font-black text-primary text-right">{s.oscCoarse > 0 ? `+${s.oscCoarse}` : s.oscCoarse} ST</div>
                           </div>
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Fine_Tune (Cents)</Label>
-                             <Slider value={[s.oscFine]} min={-100} max={100} step={1} onValueChange={(v) => onUpdate('oscFine', v[0])} />
+                             <Slider disabled={!s.oscActive} value={[s.oscFine]} min={-100} max={100} step={1} onValueChange={(v) => onUpdate('oscFine', v[0])} />
                              <div className="text-[10px] font-black text-primary text-right">{s.oscFine > 0 ? `+${s.oscFine}` : s.oscFine} C</div>
                           </div>
                        </div>
                        <div className="space-y-8">
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">PW / Phase_Width</Label>
-                             <Slider value={[s.oscPw * 100]} onValueChange={(v) => onUpdate('oscPw', v[0] / 100)} />
+                             <Slider disabled={!s.oscActive} value={[s.oscPw * 100]} onValueChange={(v) => onUpdate('oscPw', v[0] / 100)} />
                           </div>
                           <div className="grid grid-cols-2 gap-4">
                              <div className="space-y-4">
                                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">LFO_Mod</Label>
-                                <Slider value={[s.oscLfo * 100]} onValueChange={(v) => onUpdate('oscLfo', v[0] / 100)} />
+                                <Slider disabled={!s.oscActive} value={[s.oscLfo * 100]} onValueChange={(v) => onUpdate('oscLfo', v[0] / 100)} />
                              </div>
                              <div className="space-y-4">
                                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Env_Mod</Label>
-                                <Slider value={[s.oscEnv * 100]} onValueChange={(v) => onUpdate('oscEnv', v[0] / 100)} />
+                                <Slider disabled={!s.oscActive} value={[s.oscEnv * 100]} onValueChange={(v) => onUpdate('oscEnv', v[0] / 100)} />
                              </div>
                           </div>
                        </div>
@@ -141,13 +169,8 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
 
               {/* AMP CONTENT */}
               <TabsContent value="amp" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
-                <div className="bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10">
-                   <div className="flex items-center justify-between">
-                      <h4 className="text-[11px] font-black uppercase text-primary tracking-[0.4em] flex items-center gap-3">
-                        <Waves className="w-4 h-4" /> AMPLIFIER_AHDSR
-                      </h4>
-                      <VisualEnvelope attack={s.ampAttack} release={s.ampRelease} />
-                   </div>
+                <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.ampActive && "opacity-30")}>
+                   <SectionHeader title="AMPLIFIER_AHDSR" icon={Waves} activeKey="ampActive" description="Output_Gain_Envelope" />
                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
                       {['Attack', 'Decay', 'Sustain', 'Release'].map((stage) => {
                         const key = `amp${stage}` as keyof ChannelSettings;
@@ -157,6 +180,7 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                             <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{stage}</Label>
                             <div className="h-40 flex flex-col items-center">
                                <Slider 
+                                 disabled={!s.ampActive}
                                  orientation="vertical" 
                                  value={[val * 100]} 
                                  max={stage === 'Sustain' ? 100 : 300} 
@@ -168,67 +192,53 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                         );
                       })}
                    </div>
+                   {s.ampActive && <VisualEnvelope attack={s.ampAttack} release={s.ampRelease} />}
                 </div>
               </TabsContent>
 
               {/* SVF CONTENT */}
               <TabsContent value="svf" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
-                 <div className="bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10">
-                    <div className="flex items-center justify-between">
-                       <h4 className="text-[11px] font-black uppercase text-primary tracking-[0.4em] flex items-center gap-3">
-                         <Activity className="w-4 h-4" /> STATE_VARIABLE_FILTER
-                       </h4>
-                       <div className="flex gap-2">
-                          {['lowpass', 'highpass', 'bandpass'].map(type => (
-                             <Button 
-                               key={type} 
-                               variant="outline" 
-                               size="sm" 
-                               className={cn("h-8 text-[8px] font-black uppercase rounded-lg border-primary/20", s.svfType === type ? "bg-primary text-black" : "bg-black/40 text-primary/40")}
-                               onClick={() => onUpdate('svfType', type)}
-                             >
-                               {type.slice(0, 4)}
-                             </Button>
-                          ))}
-                       </div>
-                    </div>
+                 <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.svfActive && "opacity-30")}>
+                    <SectionHeader title="STATE_VARIABLE_FILTER" icon={Activity} activeKey="svfActive" description="Acoustic_Sculpting" />
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
                        <div className="space-y-8">
-                          <VisualFilterCurve cutoff={s.svfCut} resonance={s.svfEmph} type={s.svfType} />
+                          {s.svfActive && <VisualFilterCurve cutoff={s.svfCut} resonance={s.svfEmph} type={s.svfType} />}
                           <div className="grid grid-cols-2 gap-8">
                              <div className="space-y-4">
                                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Cutoff</Label>
-                                <Slider value={[s.svfCut * 100]} onValueChange={(v) => onUpdate('svfCut', v[0] / 100)} />
+                                <Slider disabled={!s.svfActive} value={[s.svfCut * 100]} onValueChange={(v) => onUpdate('svfCut', v[0] / 100)} />
                              </div>
                              <div className="space-y-4">
                                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Emph (Res)</Label>
-                                <Slider value={[s.svfEmph * 100]} onValueChange={(v) => onUpdate('svfEmph', v[0] / 100)} />
+                                <Slider disabled={!s.svfActive} value={[s.svfEmph * 100]} onValueChange={(v) => onUpdate('svfEmph', v[0] / 100)} />
                              </div>
                           </div>
                        </div>
                        <div className="space-y-6">
+                          <div className="flex gap-2 mb-4">
+                            {['lowpass', 'highpass', 'bandpass'].map(type => (
+                               <Button 
+                                 key={type} 
+                                 disabled={!s.svfActive}
+                                 variant="outline" 
+                                 size="sm" 
+                                 className={cn("h-8 text-[8px] font-black uppercase rounded-lg border-primary/20", s.svfType === type ? "bg-primary text-black" : "bg-black/40 text-primary/40")}
+                                 onClick={() => onUpdate('svfType', type)}
+                               >
+                                 {type.slice(0, 4)}
+                               </Button>
+                            ))}
+                          </div>
                           <div className="grid grid-cols-2 gap-4">
                              <div className="space-y-4">
                                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Env_Depth</Label>
-                                <Slider value={[s.svfEnv * 100]} onValueChange={(v) => onUpdate('svfEnv', v[0] / 100)} />
+                                <Slider disabled={!s.svfActive} value={[s.svfEnv * 100]} onValueChange={(v) => onUpdate('svfEnv', v[0] / 100)} />
                              </div>
                              <div className="space-y-4">
                                 <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">KB_Tracking</Label>
-                                <Slider value={[s.svfKb * 100]} onValueChange={(v) => onUpdate('svfKb', v[0] / 100)} />
+                                <Slider disabled={!s.svfActive} value={[s.svfKb * 100]} onValueChange={(v) => onUpdate('svfKb', v[0] / 100)} />
                              </div>
-                          </div>
-                          <div className="pt-4 border-t border-white/5 grid grid-cols-4 gap-4">
-                             {['Attack', 'Decay', 'Sustain', 'Release'].map(stage => {
-                                const key = `svf${stage}` as keyof ChannelSettings;
-                                const val = (s as any)[key] || 0;
-                                return (
-                                  <div key={stage} className="space-y-3 flex flex-col items-center">
-                                     <Label className="text-[8px] font-black text-muted-foreground uppercase">{stage.slice(0, 3)}</Label>
-                                     <Slider orientation="vertical" className="h-24" value={[val * 100]} onValueChange={(v) => onUpdate(key, v[0] / 100)} />
-                                  </div>
-                                );
-                             })}
                           </div>
                        </div>
                     </div>
@@ -237,37 +247,23 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
 
               {/* LFO CONTENT */}
               <TabsContent value="lfo" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
-                 <div className="bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10">
-                    <div className="flex items-center justify-between">
-                       <h4 className="text-[11px] font-black uppercase text-primary tracking-[0.4em] flex items-center gap-3">
-                         <Zap className="w-4 h-4" /> MODULATION_LFO
-                       </h4>
-                       <VisualLFO rate={s.lfoRate} delay={s.lfoDelay} />
-                    </div>
+                 <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.lfoActive && "opacity-30")}>
+                    <SectionHeader title="MODULATION_LFO" icon={Zap} activeKey="lfoActive" description="Low_Frequency_Modulator" />
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-12">
                        <div className="space-y-8">
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Rate (Freq)</Label>
-                             <Slider value={[s.lfoRate * 100]} max={2000} onValueChange={(v) => onUpdate('lfoRate', v[0] / 100)} />
+                             <Slider disabled={!s.lfoActive} value={[s.lfoRate * 100]} max={2000} onValueChange={(v) => onUpdate('lfoRate', v[0] / 100)} />
                              <div className="text-[10px] font-black text-primary text-right">{(s.lfoRate * 10).toFixed(1)} Hz</div>
                           </div>
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Delay (Fade)</Label>
-                             <Slider value={[s.lfoDelay * 100]} onValueChange={(v) => onUpdate('lfoDelay', v[0] / 100)} />
+                             <Slider disabled={!s.lfoActive} value={[s.lfoDelay * 100]} onValueChange={(v) => onUpdate('lfoDelay', v[0] / 100)} />
                           </div>
                        </div>
                        <div className="bg-white/5 p-8 rounded-3xl border border-white/5 space-y-4">
                           <Label className="text-[9px] font-black uppercase tracking-widest text-primary">Routing_Matrix</Label>
-                          <div className="space-y-4">
-                             <div className="flex justify-between items-center">
-                                <span className="text-[9px] font-black uppercase text-muted-foreground">Pitch_Mod</span>
-                                <Slider className="w-32" value={[s.oscLfo * 100]} onValueChange={(v) => onUpdate('oscLfo', v[0] / 100)} />
-                             </div>
-                             <div className="flex justify-between items-center">
-                                <span className="text-[9px] font-black uppercase text-muted-foreground">Filter_Mod</span>
-                                <Slider className="w-32" value={[s.svfLfo * 100]} onValueChange={(v) => onUpdate('svfLfo', v[0] / 100)} />
-                             </div>
-                          </div>
+                          {s.lfoActive && <VisualLFO rate={s.lfoRate} delay={s.lfoDelay} />}
                        </div>
                     </div>
                  </div>
@@ -275,19 +271,17 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
 
               {/* FX/LIMITER CONTENT */}
               <TabsContent value="fx" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
-                 <div className="bg-black/40 p-10 rounded-[2.5rem] border border-white/5 grid grid-cols-2 gap-12">
+                 <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 grid grid-cols-2 gap-12 transition-opacity", !s.fxActive && "opacity-30")}>
                     <div className="space-y-8">
-                       <h4 className="text-[11px] font-black uppercase text-primary tracking-[0.4em] flex items-center gap-3">
-                         <Layers className="w-4 h-4" /> FX_CHAIN
-                       </h4>
+                       <SectionHeader title="FX_CHAIN" icon={Layers} activeKey="fxActive" description="Harmonic_Saturation" />
                        <div className="space-y-6">
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Unison_Spread</Label>
-                             <Slider value={[s.unison * 100]} onValueChange={(v) => onUpdate('unison', v[0] / 100)} />
+                             <Slider disabled={!s.fxActive} value={[s.unison * 100]} onValueChange={(v) => onUpdate('unison', v[0] / 100)} />
                           </div>
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Harmonic_Dist</Label>
-                             <Slider value={[s.distortion * 100]} onValueChange={(v) => onUpdate('distortion', v[0] / 100)} />
+                             <Slider disabled={!s.fxActive} value={[s.distortion * 100]} onValueChange={(v) => onUpdate('distortion', v[0] / 100)} />
                           </div>
                        </div>
                     </div>
@@ -298,11 +292,11 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                        <div className="space-y-6">
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Pre_Gain</Label>
-                             <Slider value={[s.limiterPre * 100]} max={200} onValueChange={(v) => onUpdate('limiterPre', v[0] / 100)} />
+                             <Slider disabled={!s.fxActive} value={[s.limiterPre * 100]} max={200} onValueChange={(v) => onUpdate('limiterPre', v[0] / 100)} />
                           </div>
                           <div className="space-y-4">
                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Mix</Label>
-                             <Slider value={[s.limiterMix * 100]} onValueChange={(v) => onUpdate('limiterMix', v[0] / 100)} />
+                             <Slider disabled={!s.fxActive} value={[s.limiterMix * 100]} onValueChange={(v) => onUpdate('limiterMix', v[0] / 100)} />
                           </div>
                        </div>
                     </div>
@@ -339,7 +333,7 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                
                <div className="bg-white/5 p-8 rounded-[2.5rem] border border-white/5">
                   <p className="text-[9px] font-bold text-muted-foreground/60 leading-relaxed uppercase tracking-widest">
-                    Adjusting these parameters modulates the internal Web Audio node graph. Changes are applied in real-time to the next scheduled note trigger.
+                    Adjusting these parameters modulates the internal Web Audio node graph. Inactive (bypassed) modules do not consume additional processing overhead.
                   </p>
                </div>
             </div>

@@ -44,6 +44,13 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   muted: false,
   reversed: false,
   
+  // Bypass Flags
+  oscActive: true,
+  svfActive: true,
+  lfoActive: true,
+  fxActive: true,
+  ampActive: true,
+
   // OSC
   oscCoarse: 0,
   oscFine: 0,
@@ -199,8 +206,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
       
       // Calculate Tune
-      const coarseMult = Math.pow(2, s.oscCoarse / 12);
-      const fineMult = Math.pow(2, s.oscFine / 1200);
+      let coarseMult = 1.0;
+      let fineMult = 1.0;
+      if (s.oscActive) {
+        coarseMult = Math.pow(2, s.oscCoarse / 12);
+        fineMult = Math.pow(2, s.oscFine / 1200);
+      }
       const basePlaybackRate = s.pitch * coarseMult * fineMult;
 
       const duration = (buffer.duration * (s.trimEnd - s.trimStart)) / basePlaybackRate;
@@ -226,44 +237,59 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         panNode.pan.value = s.pan + (v === 1 ? 0.2 : v === 2 ? -0.2 : 0);
 
         // SVF Filter Mode
-        filterNode.type = s.svfType === 'lowpass' ? 'lowpass' : s.svfType === 'highpass' ? 'highpass' : 'bandpass';
-        
-        // SVF Envelope
-        const baseFreq = 200 + (Math.pow(s.svfCut, 2) * 19800);
-        const peakFreq = Math.min(22000, baseFreq * (1 + (s.svfEnv * 10)));
-        filterNode.frequency.setValueAtTime(baseFreq, startTime);
-        filterNode.frequency.exponentialRampToValueAtTime(peakFreq, startTime + s.svfAttack);
-        filterNode.frequency.exponentialRampToValueAtTime(Math.max(20, peakFreq * s.svfSustain), startTime + s.svfAttack + s.svfDecay);
-        filterNode.Q.value = s.svfEmph * 20;
+        if (s.svfActive) {
+          filterNode.type = s.svfType === 'lowpass' ? 'lowpass' : s.svfType === 'highpass' ? 'highpass' : 'bandpass';
+          const baseFreq = 200 + (Math.pow(s.svfCut, 2) * 19800);
+          const peakFreq = Math.min(22000, baseFreq * (1 + (s.svfEnv * 10)));
+          filterNode.frequency.setValueAtTime(baseFreq, startTime);
+          filterNode.frequency.exponentialRampToValueAtTime(peakFreq, startTime + s.svfAttack);
+          filterNode.frequency.exponentialRampToValueAtTime(Math.max(20, peakFreq * s.svfSustain), startTime + s.svfAttack + s.svfDecay);
+          filterNode.Q.value = s.svfEmph * 20;
+        } else {
+          filterNode.type = 'allpass';
+        }
 
         // AMP Envelope
-        const peakGain = s.volume * s.limiterPre * s.ampLevel;
-        gainNode.gain.setValueAtTime(0, startTime);
-        gainNode.gain.linearRampToValueAtTime(peakGain, startTime + s.ampAttack);
-        gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain * s.ampSustain), startTime + s.ampAttack + s.ampDecay);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+        const peakGain = s.ampActive ? (s.volume * s.limiterPre * s.ampLevel) : s.volume;
+        if (s.ampActive) {
+          gainNode.gain.setValueAtTime(0, startTime);
+          gainNode.gain.linearRampToValueAtTime(peakGain, startTime + s.ampAttack);
+          gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain * s.ampSustain), startTime + s.ampAttack + s.ampDecay);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+        } else {
+          gainNode.gain.setValueAtTime(peakGain, startTime);
+        }
 
-        // LFO Modulation (Simplified Routing)
-        if (s.lfoRate > 0) {
+        // LFO Modulation
+        if (s.lfoActive && s.lfoRate > 0) {
           const lfo = ctx.createOscillator();
           const lfoGain = ctx.createGain();
           lfo.frequency.value = s.lfoRate * 10;
-          lfoGain.gain.value = s.svfLfo * 1000; // Modulate Filter
+          lfoGain.gain.value = s.svfLfo * 1000;
           lfo.connect(lfoGain);
-          lfoGain.connect(filterNode.frequency);
+          if (s.svfActive) lfoGain.connect(filterNode.frequency);
           lfo.start(startTime);
           lfo.stop(startTime + duration);
         }
 
         source.connect(filterNode);
         filterNode.connect(distortionNode);
-        if (s.distortion > 0) distortionNode.curve = makeDistortionCurve(s.distortion);
+        if (s.fxActive && s.distortion > 0) {
+          distortionNode.curve = makeDistortionCurve(s.distortion);
+        } else {
+          distortionNode.curve = null;
+        }
         distortionNode.connect(gainNode);
         gainNode.connect(panNode);
-        panNode.connect(limiterNode);
         
-        const destination = context ? context.destination : (masterAnalyserRef.current || ctx.destination);
-        limiterNode.connect(destination);
+        if (s.fxActive) {
+          panNode.connect(limiterNode);
+          const destination = context ? context.destination : (masterAnalyserRef.current || ctx.destination);
+          limiterNode.connect(destination);
+        } else {
+          const destination = context ? context.destination : (masterAnalyserRef.current || ctx.destination);
+          panNode.connect(destination);
+        }
 
         source.start(startTime, s.trimStart * buffer.duration, duration);
       }

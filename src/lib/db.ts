@@ -29,6 +29,13 @@ export interface ChannelSettings {
   muted: boolean;
   reversed: boolean;
   
+  // Bypass Flags
+  oscActive: boolean;
+  svfActive: boolean;
+  lfoActive: boolean;
+  fxActive: boolean;
+  ampActive: boolean;
+
   // OSC Lab
   oscCoarse: number; // semitones -24 to 24
   oscFine: number;   // cents -100 to 100
