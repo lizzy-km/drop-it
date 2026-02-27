@@ -9,7 +9,8 @@ import {
   RotateCcw, Scissors, Timer, Settings, Volume1, Maximize2,
   Gauge, Activity, Sliders, Repeat,
   ChevronRight, ArrowRightLeft, FastForward, Clock, FileUp, FileDown,
-  Dices, ArrowLeft, ArrowRight, Copy, X, AlertTriangle, Wand2
+  Dices, ArrowLeft, ArrowRight, Copy, X, AlertTriangle, Wand2,
+  Upload, DownloadCloud
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
 import { cn } from '@/lib/utils';
@@ -51,7 +52,7 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   fxActive: true,
   ampActive: true,
 
-  // OSC
+  // OSC Lab
   oscCoarse: 0,
   oscFine: 0,
   oscLevel: 1.0,
@@ -59,14 +60,14 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   oscEnv: 0,
   oscPw: 0,
 
-  // AMP
+  // AMP Envelope (Amplifier)
   ampAttack: 0.01,
   ampDecay: 0.1,
   ampSustain: 1.0,
   ampRelease: 0.1,
   ampLevel: 1.0,
 
-  // SVF
+  // SVF (State Variable Filter)
   svfCut: 1.0,
   svfEmph: 0.2,
   svfEnv: 0,
@@ -78,26 +79,26 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   svfSustain: 0.5,
   svfRelease: 0.1,
 
-  // LFO
+  // LFO Lab
   lfoRate: 1.0,
   lfoDelay: 0,
 
-  // Legacy
-  vibrato: 0,
-  unison: 0,
-  filterSeq: 0,
+  // Legacy/Internal Mapping
   volAttack: 0.01,
   volHold: 0,
   volDecay: 0.1,
   volSustain: 0.8,
   volRelease: 0.1,
+  
   filterAttack: 0.1,
   filterHold: 0,
   filterDecay: 0.1,
   filterSustain: 0.5,
   filterRelease: 0.1,
+  
   limiterPre: 0.8,
   limiterMix: 0,
+
   attack: 0.01,
   release: 0.1,
   trimStart: 0,
@@ -260,18 +261,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
           gainNode.gain.setValueAtTime(peakGain, startTime);
         }
 
-        // LFO Modulation
-        if (s.lfoActive && s.lfoRate > 0) {
-          const lfo = ctx.createOscillator();
-          const lfoGain = ctx.createGain();
-          lfo.frequency.value = s.lfoRate * 10;
-          lfoGain.gain.value = s.svfLfo * 1000;
-          lfo.connect(lfoGain);
-          if (s.svfActive) lfoGain.connect(filterNode.frequency);
-          lfo.start(startTime);
-          lfo.stop(startTime + duration);
-        }
-
         source.connect(filterNode);
         filterNode.connect(distortionNode);
         if (s.fxActive && s.distortion > 0) {
@@ -282,12 +271,11 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         distortionNode.connect(gainNode);
         gainNode.connect(panNode);
         
+        const destination = context ? context.destination : (masterAnalyserRef.current || ctx.destination);
         if (s.fxActive) {
           panNode.connect(limiterNode);
-          const destination = context ? context.destination : (masterAnalyserRef.current || ctx.destination);
           limiterNode.connect(destination);
         } else {
-          const destination = context ? context.destination : (masterAnalyserRef.current || ctx.destination);
           panNode.connect(destination);
         }
 
@@ -335,7 +323,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   const randomizePattern = () => {
     const activeChannels = Object.keys(selectedClipsForChannel).filter(ch => !!selectedClipsForChannel[ch]);
     if (activeChannels.length === 0) {
-      toast({ title: "No Tracks Selected", description: "Select a clip for a track first.", variant: "destructive" });
+      toast({ title: "No Tracks Assigned", description: "Assign sound clips to tracks before generating patterns.", variant: "destructive" });
       return;
     }
 
@@ -344,11 +332,18 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       const clipId = selectedClipsForChannel[ch];
       for (let s = 0; s < numSteps; s++) {
         if (Math.random() > 0.85) newGrid[`${ch}-${s}`] = [clipId];
-        else delete newGrid[`${ch}-${s}`];
+        else {
+           // Only clear the step for THIS channel
+           const key = `${ch}-${s}`;
+           if (newGrid[key]) {
+              newGrid[key] = newGrid[key].filter(id => id !== clipId);
+              if (newGrid[key].length === 0) delete newGrid[key];
+           }
+        }
       }
     });
     setGrid(newGrid);
-    toast({ title: "Pattern Generated" });
+    toast({ title: "Pattern Generated", description: `Rhythms manifested on ${activeChannels.length} active tracks.` });
   };
 
   const updateChannelSetting = (idx: string, key: keyof ChannelSettings, val: any) => {
@@ -370,7 +365,54 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     };
     db.saveTrack(newTrack);
     onSaveTrack(newTrack);
-    toast({ title: "Project Saved" });
+    toast({ title: "Session Committed", description: "Acoustic model saved to studio database." });
+  };
+
+  const handleExportConfig = () => {
+    const projectData = {
+      title,
+      bpm,
+      numChannels,
+      numSteps,
+      grid,
+      channelSettings,
+      selectedClips: selectedClipsForChannel,
+      version: "1.0.0",
+      exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.replace(/\s+/g, '_')}_Config.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Project Exported", description: "Portable JSON configuration generated." });
+  };
+
+  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        setTitle(data.title || 'IMPORTED_PROJECT');
+        setBpm(data.bpm || 120);
+        setBpmInput((data.bpm || 120).toString());
+        setNumSteps(data.numSteps || 16);
+        setNumStepsInput((data.numSteps || 16).toString());
+        setNumChannels(data.numChannels || DEFAULT_CHANNELS);
+        setGrid(data.grid || {});
+        setChannelSettings(data.channelSettings || {});
+        setSelectedClipsForChannel(data.selectedClips || {});
+        toast({ title: "Project Imported", description: "Acoustic configuration reconciled successfully." });
+      } catch (err) {
+        toast({ title: "Import Error", description: "Invalid project configuration file.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleExportAudio = async () => {
@@ -418,7 +460,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
               placeholder="PROJECT_TITLE"
             />
             <div className="flex flex-col md:flex-row items-center gap-8">
-              <div className="flex items-center gap-4 h-[60] rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full bg-black/20">
+              <div className="flex items-center gap-4 h-[60px] rounded-[2rem] px-8 py-4 border border-primary/20 flex-1 w-full bg-black/20">
                 <MasterVisualizer analyser={masterAnalyserRef.current} />
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={randomizePattern} className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary border border-primary/10 gap-2">
@@ -471,8 +513,13 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
               {isPlaying ? <Square className="w-8 h-8 fill-current" /> : <Play className="w-8 h-8 fill-current ml-1" />}
             </Button>
             <div className="flex flex-col gap-3">
-              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleSave}><Save className="w-5 h-5" /></Button>
-              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-primary/20 text-primary" onClick={handleExportAudio} disabled={isExporting}>
+              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleSave} title="Save to Database"><Save className="w-5 h-5" /></Button>
+              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" onClick={handleExportConfig} title="Export Project JSON"><DownloadCloud className="w-5 h-5" /></Button>
+              <div className="relative">
+                <input type="file" accept=".json" onChange={handleImportConfig} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-black/40 text-primary" title="Import Project JSON"><Upload className="w-5 h-5" /></Button>
+              </div>
+              <Button size="icon" className="w-12 h-12 rounded-2xl gold-border bg-primary/20 text-primary" onClick={handleExportAudio} disabled={isExporting} title="Render Master WAV">
                 {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
               </Button>
             </div>
@@ -585,3 +632,4 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     </div>
   );
 }
+
