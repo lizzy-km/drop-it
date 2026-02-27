@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -51,6 +52,10 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   fxActive: true,
   ampActive: true,
 
+  // Synthesis Parameters
+  unison: 0,
+  vibrato: 0,
+
   // OSC Lab
   oscCoarse: 0,
   oscFine: 0,
@@ -61,6 +66,7 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
 
   // AMP Envelope (Amplifier)
   ampAttack: 0.01,
+  ampHold: 0,
   ampDecay: 0.1,
   ampSustain: 1.0,
   ampRelease: 0.1,
@@ -82,22 +88,11 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   lfoRate: 1.0,
   lfoDelay: 0,
 
-  // Legacy/Internal Mapping
-  volAttack: 0.01,
-  volHold: 0,
-  volDecay: 0.1,
-  volSustain: 0.8,
-  volRelease: 0.1,
-  
-  filterAttack: 0.1,
-  filterHold: 0,
-  filterDecay: 0.1,
-  filterSustain: 0.5,
-  filterRelease: 0.1,
-  
-  limiterPre: 0.8,
+  // Limiter
+  limiterPre: 1.0,
   limiterMix: 0,
 
+  // Legacy/Internal Mapping
   attack: 0.01,
   release: 0.1,
   trimStart: 0,
@@ -192,9 +187,11 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       if (s.reversed) {
         if (!reversedBuffersRef.current[clipId]) {
           const rev = new AudioBuffer({ length: buffer.length, numberOfChannels: buffer.numberOfChannels, sampleRate: buffer.sampleRate });
-          for (let i = 0; i < buffer.length; i++) {
-            for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-              rev.getChannelData(ch)[i] = buffer.getChannelData(ch)[buffer.length - 1 - i];
+          for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+            const originalData = buffer.getChannelData(ch);
+            const reversedData = rev.getChannelData(ch);
+            for (let i = 0; i < buffer.length; i++) {
+              reversedData[i] = originalData[buffer.length - 1 - i];
             }
           }
           reversedBuffersRef.current[clipId] = rev;
@@ -202,17 +199,18 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         buffer = reversedBuffersRef.current[clipId];
       }
 
-      const numVoices = (s.fxActive && s.unison > 0) ? 3 : 1;
-      const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
+      // Safe Parameter Calculations
+      const unison = s.unison || 0;
+      const pitch = s.pitch || 1.0;
+      const coarseMult = Math.pow(2, (s.oscCoarse || 0) / 12);
+      const fineMult = Math.pow(2, (s.oscFine || 0) / 1200);
+      const basePlaybackRate = Math.max(0.001, pitch * coarseMult * fineMult);
       
-      let coarseMult = 1.0;
-      let fineMult = 1.0;
-      if (s.oscActive) {
-        coarseMult = Math.pow(2, s.oscCoarse / 12);
-        fineMult = Math.pow(2, s.oscFine / 1200);
-      }
-      const basePlaybackRate = s.pitch * coarseMult * fineMult;
-      const duration = (buffer.duration * (s.trimEnd - s.trimStart)) / basePlaybackRate;
+      const numVoices = (s.fxActive && unison > 0) ? 3 : 1;
+      const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
+      const trimStart = s.trimStart || 0;
+      const trimEnd = s.trimEnd || 1;
+      const duration = (buffer.duration * (trimEnd - trimStart)) / basePlaybackRate;
 
       for (let v = 0; v < numVoices; v++) {
         const source = ctx.createBufferSource();
@@ -228,28 +226,30 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         limiterNode.attack.setValueAtTime(0.001, startTime);
         limiterNode.release.setValueAtTime(0.1, startTime);
 
-        const detune = (v === 0) ? 0 : (v === 1 ? s.unison * 0.1 : -s.unison * 0.1);
+        const detune = (v === 0) ? 0 : (v === 1 ? unison * 0.1 : -unison * 0.1);
         source.buffer = buffer;
-        source.playbackRate.value = basePlaybackRate + detune;
-        panNode.pan.value = s.pan + (v === 1 ? 0.2 : v === 2 ? -0.2 : 0);
+        source.playbackRate.setValueAtTime(basePlaybackRate + detune, startTime);
+        
+        const panValue = Math.max(-1, Math.min(1, s.pan + (v === 1 ? 0.2 : v === 2 ? -0.2 : 0)));
+        panNode.pan.setValueAtTime(panValue, startTime);
 
         if (s.svfActive) {
-          filterNode.type = s.svfType === 'lowpass' ? 'lowpass' : s.svfType === 'highpass' ? 'highpass' : 'bandpass';
-          const baseFreq = 200 + (Math.pow(s.svfCut, 2) * 19800);
-          const peakFreq = Math.min(22000, baseFreq * (1 + (s.svfEnv * 10)));
+          filterNode.type = s.svfType || 'lowpass';
+          const baseFreq = 20 + (Math.pow(s.svfCut || 1, 2) * 19980);
+          const peakFreq = Math.min(22000, baseFreq * (1 + ((s.svfEnv || 0) * 10)));
           filterNode.frequency.setValueAtTime(baseFreq, startTime);
-          filterNode.frequency.exponentialRampToValueAtTime(peakFreq, startTime + s.svfAttack);
-          filterNode.frequency.exponentialRampToValueAtTime(Math.max(20, peakFreq * s.svfSustain), startTime + s.svfAttack + s.svfDecay);
-          filterNode.Q.value = s.svfEmph * 20;
+          filterNode.frequency.exponentialRampToValueAtTime(peakFreq, startTime + (s.svfAttack || 0.01));
+          filterNode.frequency.exponentialRampToValueAtTime(Math.max(20, peakFreq * (s.svfSustain || 0.5)), startTime + (s.svfAttack || 0.01) + (s.svfDecay || 0.1));
+          filterNode.Q.setValueAtTime((s.svfEmph || 0.2) * 20, startTime);
         } else {
           filterNode.type = 'allpass';
         }
 
-        const peakGain = s.ampActive ? (s.volume * s.limiterPre * s.ampLevel) : s.volume;
+        const peakGain = s.ampActive ? ((s.volume || 0.8) * (s.limiterPre || 1.0) * (s.ampLevel || 1.0)) : (s.volume || 0.8);
         if (s.ampActive) {
           gainNode.gain.setValueAtTime(0, startTime);
-          gainNode.gain.linearRampToValueAtTime(peakGain, startTime + s.ampAttack);
-          gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain * s.ampSustain), startTime + s.ampAttack + s.ampDecay);
+          gainNode.gain.linearRampToValueAtTime(peakGain, startTime + (s.ampAttack || 0.01));
+          gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain * (s.ampSustain || 1.0)), startTime + (s.ampAttack || 0.01) + (s.ampDecay || 0.1));
           gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
         } else {
           gainNode.gain.setValueAtTime(peakGain, startTime);
@@ -257,7 +257,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
 
         source.connect(filterNode);
         filterNode.connect(distortionNode);
-        if (s.fxActive && s.distortion > 0) {
+        if (s.fxActive && (s.distortion || 0) > 0) {
           distortionNode.curve = makeDistortionCurve(s.distortion);
         } else {
           distortionNode.curve = null;
@@ -266,14 +266,14 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
         gainNode.connect(panNode);
         
         const destination = context ? context.destination : (masterAnalyserRef.current || ctx.destination);
-        if (s.fxActive) {
+        if (s.fxActive && (s.limiterMix || 0) > 0) {
           panNode.connect(limiterNode);
           limiterNode.connect(destination);
         } else {
           panNode.connect(destination);
         }
 
-        source.start(startTime, s.trimStart * buffer.duration, duration);
+        source.start(startTime, trimStart * buffer.duration, duration);
       }
     } catch (e) {
       console.error(e);
@@ -363,7 +363,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   };
 
   const handleExportConfig = () => {
-    const projectData = {
+    const currentTrack: Track = {
+      id: track?.id || crypto.randomUUID(),
+      userId: user.id,
       title,
       bpm,
       numChannels,
@@ -371,39 +373,53 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       grid,
       channelSettings,
       selectedClips: selectedClipsForChannel,
-      version: "1.0.0",
-      exportedAt: new Date().toISOString()
+      createdAt: Date.now()
     };
-    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+    const usedClipIds = new Set(Object.values(grid).flat());
+    const usedClips = clips.filter(c => usedClipIds.has(c.id));
+    const exportData = { type: "DROPIT_PROJECT", track: currentTrack, clips: usedClips };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${title.replace(/\s+/g, '_')}_Config.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "Project Exported", description: "Portable JSON configuration generated." });
+    toast({ title: "Config Exported" });
   };
 
   const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
-        setTitle(data.title || 'IMPORTED_PROJECT');
-        setBpm(data.bpm || 120);
-        setBpmInput((data.bpm || 120).toString());
-        setNumSteps(data.numSteps || 16);
-        setNumStepsInput((data.numSteps || 16).toString());
-        setNumChannels(data.numChannels || DEFAULT_CHANNELS);
-        setGrid(data.grid || {});
-        setChannelSettings(data.channelSettings || {});
-        setSelectedClipsForChannel(data.selectedClips || {});
-        toast({ title: "Project Imported", description: "Acoustic configuration reconciled successfully." });
+        if (data.type !== "DROPIT_PROJECT" && !data.patterns) throw new Error("Unsupported Format");
+        
+        if (data.clips) {
+           data.clips.forEach((clip: AudioClip) => db.saveClip({ ...clip, userId: user.id }));
+        }
+        
+        const importedTrack = { 
+          id: crypto.randomUUID(),
+          userId: user.id,
+          title: `IMPORTED_${data.track?.title || 'DAW_PATTERN'}`,
+          bpm: data.track?.bpm || data.bpm || 120,
+          numChannels: data.track?.numChannels || data.numChannels || 4,
+          numSteps: data.track?.numSteps || data.numSteps || 16,
+          grid: data.track?.grid || data.grid || {},
+          channelSettings: data.track?.channelSettings || data.channelSettings || {},
+          selectedClips: data.track?.selectedClips || data.selectedClips || {},
+          createdAt: Date.now()
+        };
+        
+        db.saveTrack(importedTrack);
+        toast({ title: "DAW Config Imported" });
+        if (onImportRefresh) onImportRefresh();
+        window.location.href = `/studio?id=${importedTrack.id}`;
       } catch (err) {
-        toast({ title: "Import Error", description: "Invalid project configuration file.", variant: "destructive" });
+        toast({ title: "Import Failed", description: "Unknown config schema.", variant: "destructive" });
       }
     };
     reader.readAsText(file);

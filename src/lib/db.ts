@@ -36,6 +36,10 @@ export interface ChannelSettings {
   fxActive: boolean;
   ampActive: boolean;
 
+  // Synthesis Parameters
+  unison: number;
+  vibrato: number;
+
   // OSC Lab
   oscCoarse: number; // semitones -24 to 24
   oscFine: number;   // cents -100 to 100
@@ -46,6 +50,7 @@ export interface ChannelSettings {
 
   // AMP Envelope (Amplifier)
   ampAttack: number;
+  ampHold: number;
   ampDecay: number;
   ampSustain: number;
   ampRelease: number;
@@ -67,22 +72,11 @@ export interface ChannelSettings {
   lfoRate: number;
   lfoDelay: number;
 
-  // Legacy/Internal Mapping
-  volAttack: number;
-  volHold: number;
-  volDecay: number;
-  volSustain: number;
-  volRelease: number;
-  
-  filterAttack: number;
-  filterHold: number;
-  filterDecay: number;
-  filterSustain: number;
-  filterRelease: number;
-  
+  // Limiter
   limiterPre: number;
   limiterMix: number;
 
+  // Legacy/Internal Mapping
   attack: number;
   release: number;
   trimStart: number;
