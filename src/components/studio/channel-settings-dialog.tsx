@@ -1,23 +1,24 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Play, Maximize2, Waves, Timer, Sparkles, Sliders, Zap, 
   Waveform, Music, Box, Settings2, Trash2, Library, Wand2,
-  Activity, Radio, ZapOff, Layers, Power
+  Activity, Radio, ZapOff, Layers, Power, Save, Plus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { ChannelSettings } from '@/lib/db';
+import { ChannelSettings, db, Preset } from '@/lib/db';
 import { toast } from '@/hooks/use-toast';
 import { VisualEnvelope, VisualFilterCurve, VisualLFO } from './visualizers';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
 
 interface ChannelSettingsDialogProps {
   channelIdx: number;
@@ -26,7 +27,7 @@ interface ChannelSettingsDialogProps {
   onAudition: () => void;
 }
 
-const PRESETS: Record<string, Partial<ChannelSettings>> = {
+const FACTORY_PRESETS: Record<string, Partial<ChannelSettings>> = {
   PUNCHY_KICK: {
     ampAttack: 0.01, ampDecay: 0.1, ampSustain: 0, ampRelease: 0.05,
     svfCut: 0.1, svfEmph: 0.2, svfType: 'lowpass', limiterPre: 1.2,
@@ -44,11 +45,40 @@ const PRESETS: Record<string, Partial<ChannelSettings>> = {
 };
 
 export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAudition }: ChannelSettingsDialogProps) {
-  const applyPreset = (preset: Partial<ChannelSettings>) => {
-    Object.entries(preset).forEach(([key, val]) => {
+  const [userPresets, setUserPresets] = useState<Preset[]>([]);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [showSaveInput, setShowSaveInput] = useState(false);
+
+  useEffect(() => {
+    setUserPresets(db.getPresets());
+  }, []);
+
+  const applyPreset = (presetSettings: Partial<ChannelSettings>) => {
+    Object.entries(presetSettings).forEach(([key, val]) => {
       onUpdate(key as keyof ChannelSettings, val);
     });
     toast({ title: "Signal Profile Applied" });
+  };
+
+  const handleSavePreset = () => {
+    if (!newPresetName.trim()) return;
+    const newPreset: Preset = {
+      id: crypto.randomUUID(),
+      name: newPresetName.toUpperCase(),
+      settings: { ...s }
+    };
+    db.savePreset(newPreset);
+    setUserPresets(db.getPresets());
+    setNewPresetName('');
+    setShowSaveInput(false);
+    toast({ title: "Preset Saved to Library" });
+  };
+
+  const deleteUserPreset = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    db.deletePreset(id);
+    setUserPresets(db.getPresets());
+    toast({ title: "Preset Deleted" });
   };
 
   const SectionHeader = ({ title, icon: Icon, activeKey, description }: { title: string, icon: any, activeKey: keyof ChannelSettings, description: string }) => (
@@ -85,23 +115,65 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
             <DialogTitle className="text-4xl font-black italic text-primary tracking-tighter uppercase flex items-center gap-4">
               <Box className="w-8 h-8" /> SAMPLER_LAB
             </DialogTitle>
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4">
+               {showSaveInput ? (
+                 <div className="flex items-center gap-2 animate-in slide-in-from-right-4">
+                    <Input 
+                      value={newPresetName}
+                      onChange={(e) => setNewPresetName(e.target.value.toUpperCase())}
+                      placeholder="PRESET_NAME"
+                      className="bg-black/40 border-primary/20 h-12 w-48 text-[10px] font-black uppercase tracking-widest text-primary"
+                    />
+                    <Button onClick={handleSavePreset} className="bg-primary text-black h-12 rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
+                      Save
+                    </Button>
+                    <Button variant="ghost" onClick={() => setShowSaveInput(false)} className="text-muted-foreground h-12">
+                      Cancel
+                    </Button>
+                 </div>
+               ) : (
+                 <Button onClick={() => setShowSaveInput(true)} variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
+                   <Save className="w-4 h-4 mr-2" /> Save_Preset
+                 </Button>
+               )}
+
                <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
                     <Wand2 className="w-4 h-4 mr-2" /> Load_Preset
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="glass-panel border-primary/20 rounded-2xl min-w-[200px]">
-                  {Object.keys(PRESETS).map(name => (
+                <DropdownMenuContent className="glass-panel border-primary/20 rounded-2xl min-w-[240px] max-h-[400px] overflow-y-auto">
+                  <div className="px-4 py-2 text-[8px] font-black text-muted-foreground uppercase tracking-widest">Factory_Standards</div>
+                  {Object.keys(FACTORY_PRESETS).map(name => (
                     <DropdownMenuItem 
                       key={name} 
                       className="focus:bg-primary/10 rounded-xl cursor-pointer font-black text-[9px] uppercase tracking-widest p-4"
-                      onClick={() => applyPreset(PRESETS[name])}
+                      onClick={() => applyPreset(FACTORY_PRESETS[name])}
                     >
                       {name}
                     </DropdownMenuItem>
                   ))}
+                  
+                  {userPresets.length > 0 && (
+                    <>
+                      <DropdownMenuSeparator className="bg-white/10" />
+                      <div className="px-4 py-2 text-[8px] font-black text-primary uppercase tracking-widest">User_Library</div>
+                      {userPresets.map(p => (
+                        <DropdownMenuItem 
+                          key={p.id} 
+                          className="focus:bg-primary/10 rounded-xl cursor-pointer font-black text-[9px] uppercase tracking-widest p-4 flex justify-between group/item"
+                          onClick={() => applyPreset(p.settings)}
+                        >
+                          <span>{p.name}</span>
+                          <Trash2 
+                            className="w-3.5 h-3.5 text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity" 
+                            onClick={(e) => deleteUserPreset(p.id, e)}
+                          />
+                        </DropdownMenuItem>
+                      ))}
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
               <div className="px-5 py-2 rounded-full bg-black/40 border border-primary/10 text-[10px] font-black text-primary/40 uppercase tracking-[0.3em]">
@@ -130,7 +202,6 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8 h-[55vh] overflow-y-auto pr-4 custom-scrollbar">
             <div className="md:col-span-8">
-              {/* OSC CONTENT */}
               <TabsContent value="osc" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
                  <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.oscActive && "opacity-30")}>
                     <SectionHeader title="OSCILLATOR_SOURCE" icon={Radio} activeKey="oscActive" description="Sample_Playback_Engine" />
@@ -167,7 +238,6 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                  </div>
               </TabsContent>
 
-              {/* AMP CONTENT */}
               <TabsContent value="amp" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
                 <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.ampActive && "opacity-30")}>
                    <SectionHeader title="AMPLIFIER_AHDSR" icon={Waves} activeKey="ampActive" description="Output_Gain_Envelope" />
@@ -199,7 +269,6 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                 </div>
               </TabsContent>
 
-              {/* SVF CONTENT */}
               <TabsContent value="svf" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
                  <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.svfActive && "opacity-30")}>
                     <SectionHeader title="STATE_VARIABLE_FILTER" icon={Activity} activeKey="svfActive" description="Acoustic_Sculpting" />
@@ -248,7 +317,6 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                  </div>
               </TabsContent>
 
-              {/* LFO CONTENT */}
               <TabsContent value="lfo" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
                  <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.lfoActive && "opacity-30")}>
                     <SectionHeader title="MODULATION_LFO" icon={Zap} activeKey="lfoActive" description="Low_Frequency_Modulator" />
@@ -272,7 +340,6 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
                  </div>
               </TabsContent>
 
-              {/* FX/LIMITER CONTENT */}
               <TabsContent value="fx" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
                  <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 grid grid-cols-2 gap-12 transition-opacity", !s.fxActive && "opacity-30")}>
                     <div className="space-y-8">
@@ -307,7 +374,6 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
               </TabsContent>
             </div>
 
-            {/* SIDEBAR MONITOR */}
             <div className="md:col-span-4 space-y-8">
                <div className="glass-panel p-8 rounded-[2.5rem] space-y-8 bg-black/60 gold-border">
                   <div className="flex items-center gap-3 text-primary">

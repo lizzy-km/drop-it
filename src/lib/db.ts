@@ -96,11 +96,19 @@ export interface Track {
   createdAt: number;
 }
 
+export interface Preset {
+  id: string;
+  name: string;
+  settings: Partial<ChannelSettings>;
+  isFactory?: boolean;
+}
+
 const STORAGE_KEYS = {
   USERS: 'dropit_users',
   CLIPS: 'dropit_clips',
   TRACKS: 'dropit_tracks',
-  CURRENT_USER: 'dropit_current_user_id'
+  CURRENT_USER: 'dropit_current_user_id',
+  PRESETS: 'dropit_presets'
 };
 
 export const db = {
@@ -196,6 +204,25 @@ export const db = {
   deleteTrack: (trackId: string) => {
     const tracks = db.getTracks().filter(t => t.id !== trackId);
     localStorage.setItem(STORAGE_KEYS.TRACKS, JSON.stringify(tracks));
+  },
+
+  getPresets: (): Preset[] => {
+    if (typeof window === 'undefined') return [];
+    const data = localStorage.getItem(STORAGE_KEYS.PRESETS);
+    return data ? JSON.parse(data) : [];
+  },
+
+  savePreset: (preset: Preset) => {
+    const presets = db.getPresets();
+    const existing = presets.findIndex(p => p.id === preset.id);
+    if (existing > -1) presets[existing] = preset;
+    else presets.push(preset);
+    localStorage.setItem(STORAGE_KEYS.PRESETS, JSON.stringify(presets));
+  },
+
+  deletePreset: (id: string) => {
+    const presets = db.getPresets().filter(p => p.id !== id);
+    localStorage.setItem(STORAGE_KEYS.PRESETS, JSON.stringify(presets));
   },
 
   getAllCreations: () => {
