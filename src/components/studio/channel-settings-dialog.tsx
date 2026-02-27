@@ -6,7 +6,7 @@ import {
   Play, Maximize2, Waves, Timer, Sparkles, Sliders, Zap, 
   Waveform, Music, Box, Settings2, Trash2, Library, Wand2,
   Activity, Radio, ZapOff, Layers, Power, Save, Plus,
-  FileDown, FileUp, Download, Upload
+  FileDown, FileUp, Download, Upload, FileJson
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
@@ -50,8 +50,7 @@ const FACTORY_PRESETS: Record<string, Partial<ChannelSettings>> = {
 
 export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBatchUpdate, onAudition }: ChannelSettingsDialogProps) {
   const [userPresets, setUserPresets] = useState<Preset[]>([]);
-  const [newPresetName, setNewPresetName] = useState('');
-  const [showSaveInput, setShowSaveInput] = useState(false);
+  const [configFileName, setConfigFileName] = useState('');
 
   useEffect(() => {
     setUserPresets(db.getPresets());
@@ -72,40 +71,20 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
     toast({ title: "Signal Profile Applied" });
   };
 
-  const handleSavePreset = () => {
-    if (!newPresetName.trim()) {
-      toast({ title: "Identification Required", description: "Name your signal profile before saving.", variant: "destructive" });
-      return;
-    }
-    const newPreset: Preset = {
-      id: crypto.randomUUID(),
-      name: newPresetName.toUpperCase(),
-      settings: { ...s }
-    };
-    db.savePreset(newPreset);
-    setUserPresets(db.getPresets());
-    setNewPresetName('');
-    setShowSaveInput(false);
-    toast({ title: "Preset Saved to Library" });
-  };
-
-  const handleExportPresetFile = () => {
+  const handleExportConfig = () => {
     try {
-      // Create a clean copy of settings for export
-      const sanitizedSettings = { ...s };
-      
       const data = {
-        type: "DROPIT_PRESET",
+        type: "DROPIT_CONFIG",
         version: "1.0",
-        name: newPresetName || `CHANNEL_${channelIdx}_CONFIG`,
-        settings: sanitizedSettings
+        timestamp: Date.now(),
+        settings: { ...s }
       };
       
       const jsonString = JSON.stringify(data, null, 2);
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       
-      const fileName = `${(newPresetName || `preset_ch_${channelIdx}`).toLowerCase().replace(/\s+/g, '_')}.json`;
+      const fileName = `${(configFileName || `signal_ch_${channelIdx}`).toLowerCase().replace(/\s+/g, '_')}.json`;
       
       const a = document.createElement('a');
       a.style.display = 'none';
@@ -120,14 +99,14 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
         window.URL.revokeObjectURL(url);
       }, 0);
       
-      toast({ title: "Config Exported to Disk", description: `Saved as ${fileName}` });
+      toast({ title: "Config Saved to Device", description: `Exported as ${fileName}` });
     } catch (err) {
       console.error("Export Error:", err);
       toast({ title: "Export Failed", variant: "destructive" });
     }
   };
 
-  const handleImportPresetFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
@@ -135,8 +114,8 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
-        if (data.type !== "DROPIT_PRESET") {
-           // Try to fallback if it looks like a raw settings object
+        if (data.type !== "DROPIT_CONFIG" && data.type !== "DROPIT_PRESET") {
+           // Fallback for raw objects
            if (data.volume !== undefined || data.oscActive !== undefined) {
              applyPreset(data);
              toast({ title: "Raw Config Loaded" });
@@ -145,7 +124,7 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
            throw new Error("Invalid Format");
         }
         applyPreset(data.settings);
-        toast({ title: "Disk Config Loaded", description: data.name || "Unnamed Preset" });
+        toast({ title: "Signal Loaded from Disk" });
       } catch (err) {
         console.error("Import Error:", err);
         toast({ title: "Import Error", description: "Unsupported config schema.", variant: "destructive" });
@@ -153,13 +132,6 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
     };
     reader.readAsText(file);
     e.target.value = '';
-  };
-
-  const deleteUserPreset = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    db.deletePreset(id);
-    setUserPresets(db.getPresets());
-    toast({ title: "Preset Deleted" });
   };
 
   const SectionHeader = ({ title, icon: Icon, activeKey, description }: { title: string, icon: any, activeKey: keyof ChannelSettings, description: string }) => (
@@ -196,42 +168,28 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
             <DialogTitle className="text-4xl font-black italic text-primary tracking-tighter uppercase flex items-center gap-4">
               <Box className="w-8 h-8" /> SAMPLER_LAB
             </DialogTitle>
+            
             <div className="flex items-center gap-4">
-               {showSaveInput ? (
-                 <div className="flex items-center gap-2 animate-in slide-in-from-right-4">
-                    <Input 
-                      value={newPresetName}
-                      onChange={(e) => setNewPresetName(e.target.value.toUpperCase())}
-                      placeholder="PRESET_NAME"
-                      className="bg-black/40 border-primary/20 h-12 w-48 text-[10px] font-black uppercase tracking-widest text-primary"
-                    />
-                    <div className="flex gap-1">
-                      <Button onClick={handleSavePreset} className="bg-primary text-black h-12 rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
-                        <Save className="w-3.5 h-3.5 mr-2" /> Save
-                      </Button>
-                      <Button onClick={handleExportPresetFile} variant="outline" className="border-primary/20 bg-black/40 h-12 rounded-xl font-black uppercase text-[10px] tracking-widest px-4 text-primary">
-                        <FileDown className="w-3.5 h-3.5 mr-2" /> Export
-                      </Button>
-                    </div>
-                    <Button variant="ghost" onClick={() => setShowSaveInput(false)} className="text-muted-foreground h-12">
-                      Cancel
-                    </Button>
-                 </div>
-               ) : (
-                 <div className="flex items-center gap-2">
-                    <Button onClick={() => setShowSaveInput(true)} variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
-                      <Save className="w-4 h-4 mr-2" /> Preset_Lab
-                    </Button>
-                    <div className="relative">
-                      <input type="file" accept=".json" onChange={handleImportPresetFile} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
-                      <Button variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
-                        <FileUp className="w-4 h-4 mr-2" /> Load_Config
-                      </Button>
-                    </div>
-                 </div>
-               )}
+              <div className="flex items-center gap-2 bg-black/20 p-2 rounded-2xl border border-white/5">
+                <Input 
+                  value={configFileName}
+                  onChange={(e) => setConfigFileName(e.target.value.toUpperCase())}
+                  placeholder="CONFIG_NAME"
+                  className="bg-transparent border-none h-10 w-40 text-[10px] font-black uppercase tracking-widest text-primary focus-visible:ring-0"
+                />
+                <Button onClick={handleExportConfig} className="bg-primary text-black h-10 rounded-xl font-black uppercase text-[10px] tracking-widest px-4">
+                  <FileDown className="w-4 h-4 mr-2" /> Save_to_Disk
+                </Button>
+              </div>
 
-               <DropdownMenu>
+              <div className="relative">
+                <input type="file" accept=".json" onChange={handleImportConfig} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                <Button variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
+                  <FileUp className="w-4 h-4 mr-2" /> Load_from_Disk
+                </Button>
+              </div>
+
+              <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="rounded-xl border-primary/20 bg-black/40 text-[10px] font-black uppercase tracking-widest text-primary h-12 px-6">
                     <Library className="w-4 h-4 mr-2" /> Preset_Library
@@ -248,31 +206,8 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
                       {name}
                     </DropdownMenuItem>
                   ))}
-                  
-                  {userPresets.length > 0 && (
-                    <>
-                      <DropdownMenuSeparator className="bg-white/10" />
-                      <div className="px-4 py-2 text-[8px] font-black text-primary uppercase tracking-widest">User_Library</div>
-                      {userPresets.map(p => (
-                        <DropdownMenuItem 
-                          key={p.id} 
-                          className="focus:bg-primary/10 rounded-xl cursor-pointer font-black text-[9px] uppercase tracking-widest p-4 flex justify-between group/item"
-                          onClick={() => applyPreset(p.settings)}
-                        >
-                          <span>{p.name}</span>
-                          <Trash2 
-                            className="w-3.5 h-3.5 text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity" 
-                            onClick={(e) => deleteUserPreset(p.id, e)}
-                          />
-                        </DropdownMenuItem>
-                      ))}
-                    </>
-                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <div className="px-5 py-2 rounded-full bg-black/40 border border-primary/10 text-[10px] font-black text-primary/40 uppercase tracking-[0.3em]">
-                CH_{channelIdx}
-              </div>
             </div>
           </div>
         </DialogHeader>
@@ -493,24 +428,9 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
                     <Play className="w-6 h-6 mr-4 fill-current" /> AUDITION
                   </Button>
                </div>
-               
-               <div className="bg-white/5 p-8 rounded-[2.5rem] border border-white/5">
-                  <p className="text-[9px] font-bold text-muted-foreground/40 leading-relaxed uppercase tracking-widest">
-                    Acoustic parameters are modulated via Web Audio nodes. Bypass inactive modules to reduce studio overhead.
-                  </p>
-               </div>
             </div>
           </div>
         </Tabs>
-        
-        <DialogFooter className="pt-8 border-t border-white/10 mt-4">
-          <Button 
-            className="w-full h-14 rounded-full bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-[0.4em] hover:bg-primary hover:text-black transition-all"
-            onClick={() => toast({ title: "Signal Committed" })}
-          >
-            Apply_Signal_Chain
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

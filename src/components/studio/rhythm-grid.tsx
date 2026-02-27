@@ -510,7 +510,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
           </div>
 
           <div className="flex items-center gap-10">
-            <div className="flex flex-col items-center gap-4 min-w-[140px]">
+            <div className="flex flex-col items-center gap-4 min-w-[160px]">
               <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">BPM</span>
               <div className="flex flex-col gap-3 w-full">
                 <input
@@ -539,7 +539,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
                 />
               </div>
             </div>
-            <div className="flex flex-col items-center gap-4 min-w-[140px]">
+            <div className="flex flex-col items-center gap-4 min-w-[160px]">
               <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Steps</span>
               <div className="flex flex-col gap-3 w-full">
                 <input
