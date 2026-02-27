@@ -229,7 +229,7 @@ function StudioContent() {
              <div className="glass-panel p-10 rounded-[3rem] space-y-6 gold-border">
                 <div className="flex items-center gap-4 text-primary">
                   <LayoutDashboard className="w-6 h-6" />
-                  <span className="font-black text-xs uppercase tracking-[0.3em] uppercase">STUDIO_METRICS</span>
+                  <span className="font-black text-xs  tracking-[0.3em] uppercase">STUDIO_METRICS</span>
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                   <div className="bg-black/40 p-6 rounded-[2rem] text-center gold-border">

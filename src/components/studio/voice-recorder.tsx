@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Save, RotateCcw, Disc } from 'lucide-react';
+import { Mic, Square, Save, RotateCcw, Disc, Cross, PlusIcon, SidebarCloseIcon } from 'lucide-react';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
 import { db, User } from '@/lib/db';
@@ -13,15 +13,40 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [selectedChar, setSelectedChar] = useState(CHARACTER_TYPES[0].id);
   const [clipName, setClipName] = useState('NEW_VOCAL');
-  
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
+  function createMediaRecorder(stream: MediaStream): MediaRecorder {
+    const mediaRecorder = new MediaRecorder(stream)
+    mediaRecorderRef.current = mediaRecorder;
+
+    return mediaRecorder
+  }
+
+  useEffect(() => {
+    if (isRecording) {
+      startRecording()
+    }
+    else {
+      stopRecording()
+    }
+
+    // Cleanup function: Stops mic if component unmounts
+    return () => {
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      }
+    };
+
+
+  }, [isRecording])
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
+
+      const mediaRecorder = createMediaRecorder(stream)
       audioChunksRef.current = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       mediaRecorder.onstop = () => {
@@ -29,15 +54,28 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
         setAudioUrl(URL.createObjectURL(blob));
       };
       mediaRecorder.start();
-      setIsRecording(true);
+
     } catch (err) {
+      mediaRecorderRef.current?.stop()
       toast({ title: "Microphone Access Denied", variant: "destructive" });
     }
   };
 
   const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
-    setIsRecording(false);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+
+      createMediaRecorder(mediaRecorderRef.current.stream).stop()
+      // 1. Stop the recorder
+      mediaRecorderRef.current.stop();
+
+      // 2. Stop the microphone hardware (the tracks)
+      mediaRecorderRef.current.stream.getTracks().forEach(track => {
+        track.stop()
+      })
+
+      setIsRecording(false);
+    }
+
   };
 
   const saveClip = async () => {
@@ -65,9 +103,9 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
     <div className="glass-panel rounded-[2.5rem] p-12 space-y-10 flex flex-col gold-border">
       <div className="flex items-center justify-between">
         <h3 className="text-3xl font-black flex items-center gap-4 italic tracking-tighter text-primary">
-          <Mic className="w-7 h-7" /> CAPTURE
+          <Mic className="w-7 h-7  " /> CAPTURE
         </h3>
-        <input 
+        <input
           value={clipName}
           onChange={(e) => setClipName(e.target.value.toUpperCase())}
           placeholder="TRACK_NAME"
@@ -79,33 +117,42 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
         {isRecording ? (
           <div className="flex flex-col items-center gap-8">
             <div className="w-28 h-28 rounded-full bg-red-500/10 border-4 border-red-500 flex items-center justify-center animate-pulse">
-              <div className="w-12 h-12 bg-red-500 rounded-xl" />
+              <div onClick={stopRecording} className="w-12 h-12 cursor-pointer bg-red-500 rounded-xl" />
             </div>
             <p className="text-red-500 font-black text-xs uppercase tracking-[0.4em]">Signal Recording...</p>
           </div>
         ) : audioUrl ? (
           <div className="flex flex-col items-center gap-10 w-full animate-in fade-in zoom-in-95">
             <div className="w-full h-16 bg-neutral-900 rounded-3xl border border-white/5 flex items-center px-6">
-               <audio src={audioUrl} controls className="w-full h-8 opacity-60 invert" />
+              <audio src={audioUrl} controls className="w-full h-8 opacity-60 invert" />
             </div>
-            <div className="flex gap-4 w-full">
+            <div className="flex gap-3 flex-wrap w-full">
               <Button variant="outline" className="flex-1 h-14 rounded-full font-black uppercase tracking-widest border-primary/20 bg-black/20" onClick={() => setAudioUrl(null)}>
                 <RotateCcw className="w-4 h-4 mr-2" /> Redo
               </Button>
+
               <Button className="flex-1 h-14 rounded-full font-black uppercase tracking-widest bg-primary text-black hover:bg-primary/90 shadow-xl" onClick={saveClip}>
                 <Save className="w-4 h-4 mr-2" /> Commit
+              </Button>
+
+              <Button onClick={()=>{
+                setIsRecording(false)
+                setAudioUrl(null);
+
+              }} className="flex-1 h-14 rounded-full font-black uppercase tracking-widest bg-destructive text-black hover:bg-primary/90 shadow-xl" >
+                Cancel
               </Button>
             </div>
           </div>
         ) : (
-          <Button 
+          <Button
             className="w-28 h-28 rounded-[2.5rem] bg-primary hover:bg-primary/90 text-black shadow-2xl transition-transform hover:scale-110 active:scale-95 gold-shadow"
-            onClick={startRecording}
+            onClick={() => setIsRecording(true)}
           >
             <Mic className="w-12 h-12" />
           </Button>
         )}
-        
+
         {isRecording && (
           <Button variant="destructive" className="absolute bottom-6 rounded-full px-10 h-10 font-black uppercase text-[10px] tracking-widest" onClick={stopRecording}>
             Cut Signal
@@ -124,8 +171,8 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
                 onClick={() => setSelectedChar(char.id)}
                 className={cn(
                   "p-5 rounded-3xl border-2 transition-all flex flex-col items-center gap-2",
-                  selectedChar === char.id 
-                    ? "border-primary bg-primary/10 shadow-lg" 
+                  selectedChar === char.id
+                    ? "border-primary bg-primary/10 shadow-lg"
                     : "border-transparent bg-black/40 hover:bg-neutral-800"
                 )}
               >
