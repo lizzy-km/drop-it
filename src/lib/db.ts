@@ -28,10 +28,35 @@ export interface ChannelSettings {
   color: string; 
   muted: boolean;
   reversed: boolean;
-  attack: number; 
-  release: number; 
-  trimStart: number; 
-  trimEnd: number; 
+  
+  // Advanced Effects
+  vibrato: number;
+  unison: number;
+  filterSeq: number;
+  
+  // Volume AHDSR
+  volAttack: number;
+  volHold: number;
+  volDecay: number;
+  volSustain: number;
+  volRelease: number;
+  
+  // Filter AHDSR
+  filterAttack: number;
+  filterHold: number;
+  filterDecay: number;
+  filterSustain: number;
+  filterRelease: number;
+  
+  // Limiter
+  limiterPre: number;
+  limiterMix: number;
+
+  // Legacy (internal mapping)
+  attack: number;
+  release: number;
+  trimStart: number;
+  trimEnd: number;
 }
 
 export interface Track {
@@ -88,7 +113,6 @@ export const db = {
     const data = localStorage.getItem(STORAGE_KEYS.CLIPS);
     let clips: AudioClip[] = data ? JSON.parse(data) : [];
     
-    // Deduplicate logic to ensure unique clips
     const uniqueMap = new Map();
     clips.forEach(clip => uniqueMap.set(clip.id, clip));
     const dedupedClips = Array.from(uniqueMap.values());
@@ -106,7 +130,6 @@ export const db = {
       clips.push(clip);
     }
     
-    // Hard deduplication before storage commit
     const uniqueMap = new Map();
     clips.forEach(c => uniqueMap.set(c.id, c));
     localStorage.setItem(STORAGE_KEYS.CLIPS, JSON.stringify(Array.from(uniqueMap.values())));
@@ -122,7 +145,6 @@ export const db = {
     const data = localStorage.getItem(STORAGE_KEYS.TRACKS);
     let tracks: Track[] = data ? JSON.parse(data) : [];
     
-    // Deduplicate tracks by ID
     const uniqueMap = new Map();
     tracks.forEach(t => uniqueMap.set(t.id, t));
     const dedupedTracks = Array.from(uniqueMap.values());
