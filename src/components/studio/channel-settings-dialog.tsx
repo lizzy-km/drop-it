@@ -171,28 +171,31 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onAud
               <TabsContent value="amp" className="mt-0 space-y-8 animate-in fade-in slide-in-from-left-4">
                 <div className={cn("bg-black/40 p-10 rounded-[2.5rem] border border-white/5 space-y-10 transition-opacity", !s.ampActive && "opacity-30")}>
                    <SectionHeader title="AMPLIFIER_AHDSR" icon={Waves} activeKey="ampActive" description="Output_Gain_Envelope" />
-                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
+                   
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-12 gap-y-10">
                       {['Attack', 'Decay', 'Sustain', 'Release'].map((stage) => {
                         const key = `amp${stage}` as keyof ChannelSettings;
                         const val = (s as any)[key] || 0;
                         return (
                           <div key={stage} className="space-y-4">
-                            <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{stage}</Label>
-                            <div className="h-40 flex flex-col items-center">
-                               <Slider 
-                                 disabled={!s.ampActive}
-                                 orientation="vertical" 
-                                 value={[val * 100]} 
-                                 max={stage === 'Sustain' ? 100 : 300} 
-                                 onValueChange={(v) => onUpdate(key, v[0] / 100)} 
-                               />
-                               <span className="text-[9px] font-black text-primary mt-4">{val.toFixed(2)}s</span>
+                            <div className="flex justify-between items-center px-1">
+                              <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">{stage}</Label>
+                              <span className="text-[10px] font-black text-primary">{val.toFixed(2)}s</span>
                             </div>
+                            <Slider 
+                              disabled={!s.ampActive}
+                              value={[val * 100]} 
+                              max={stage === 'Sustain' ? 100 : 300} 
+                              onValueChange={(v) => onUpdate(key, v[0] / 100)} 
+                            />
                           </div>
                         );
                       })}
                    </div>
-                   {s.ampActive && <VisualEnvelope attack={s.ampAttack} release={s.ampRelease} />}
+                   
+                   <div className="pt-8 border-t border-white/5">
+                    {s.ampActive && <VisualEnvelope attack={s.ampAttack} release={s.ampRelease} />}
+                   </div>
                 </div>
               </TabsContent>
 

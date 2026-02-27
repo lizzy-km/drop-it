@@ -118,19 +118,19 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   const [title, setTitle] = useState(track?.title || 'NEW_PROJECT_01');
 
   const [channelSettings, setChannelSettings] = useState<Record<string, ChannelSettings>>(() => {
-    if (track?.channelSettings) {
-      const merged: Record<string, ChannelSettings> = {};
-      Object.entries(track.channelSettings).forEach(([key, val]) => {
-        merged[key] = { ...DEFAULT_CHANNEL_SETTINGS, ...val };
-      });
-      return merged;
+    const baseSettings: Record<string, ChannelSettings> = {};
+    const count = Math.max(DEFAULT_CHANNELS, track?.numChannels || 0);
+    
+    for (let i = 0; i < count; i++) {
+      const key = i.toString();
+      const existing = track?.channelSettings?.[key];
+      baseSettings[key] = { 
+        ...DEFAULT_CHANNEL_SETTINGS, 
+        ...existing,
+        color: existing?.color || CHANNEL_COLORS[i % CHANNEL_COLORS.length].class 
+      };
     }
-    return Object.fromEntries(
-      Array.from({ length: DEFAULT_CHANNELS }).map((_, i) => [
-        i.toString(), 
-        { ...DEFAULT_CHANNEL_SETTINGS, color: CHANNEL_COLORS[i % CHANNEL_COLORS.length].class }
-      ])
-    );
+    return baseSettings;
   });
 
   const [selectedClipsForChannel, setSelectedClipsForChannel] = useState<Record<string, string>>(
@@ -219,8 +219,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
       
       const numVoices = (s.fxActive && unison > 0) ? 3 : 1;
       const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
-      const trimStart = s.trimStart ?? 0;
-      const trimEnd = s.trimEnd ?? 1;
+      const trimStart = isNaN(s.trimStart) ? 0 : s.trimStart;
+      const trimEnd = isNaN(s.trimEnd) ? 1 : s.trimEnd;
       const duration = (buffer.duration * (trimEnd - trimStart)) / basePlaybackRate;
 
       for (let v = 0; v < numVoices; v++) {
@@ -246,24 +246,26 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
 
         if (s.svfActive) {
           filterNode.type = s.svfType || 'lowpass';
-          const baseFreq = 20 + (Math.pow(s.svfCut ?? 1, 2) * 19980);
-          const peakFreq = Math.min(22000, baseFreq * (1 + ((s.svfEnv ?? 0) * 10)));
+          const baseFreq = Math.max(20, 20 + (Math.pow(s.svfCut ?? 1, 2) * 19980));
+          const peakFreq = Math.min(20000, baseFreq * (1 + ((s.svfEnv ?? 0) * 10)));
           filterNode.frequency.setValueAtTime(baseFreq, startTime);
-          filterNode.frequency.exponentialRampToValueAtTime(peakFreq, startTime + (s.svfAttack ?? 0.01));
-          filterNode.frequency.exponentialRampToValueAtTime(Math.max(20, peakFreq * (s.svfSustain ?? 0.5)), startTime + (s.svfAttack ?? 0.01) + (s.svfDecay ?? 0.1));
+          filterNode.frequency.exponentialRampToValueAtTime(peakFreq, startTime + Math.max(0.001, s.svfAttack ?? 0.01));
+          filterNode.frequency.exponentialRampToValueAtTime(Math.max(20, peakFreq * (s.svfSustain ?? 0.5)), startTime + Math.max(0.001, (s.svfAttack ?? 0.01) + (s.svfDecay ?? 0.1)));
           filterNode.Q.setValueAtTime((s.svfEmph ?? 0.2) * 20, startTime);
         } else {
           filterNode.type = 'allpass';
         }
 
         const peakGain = s.ampActive ? ((s.volume ?? 0.8) * (s.limiterPre ?? 1.0) * (s.ampLevel ?? 1.0)) : (s.volume ?? 0.8);
+        const safePeakGain = isNaN(peakGain) ? 0.8 : Math.max(0.0001, peakGain);
+        
         if (s.ampActive) {
           gainNode.gain.setValueAtTime(0, startTime);
-          gainNode.gain.linearRampToValueAtTime(peakGain, startTime + (s.ampAttack ?? 0.01));
-          gainNode.gain.exponentialRampToValueAtTime(Math.max(0.001, peakGain * (s.ampSustain ?? 1.0)), startTime + (s.ampAttack ?? 0.01) + (s.ampDecay ?? 0.1));
+          gainNode.gain.linearRampToValueAtTime(safePeakGain, startTime + Math.max(0.001, s.ampAttack ?? 0.01));
+          gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, safePeakGain * (s.ampSustain ?? 1.0)), startTime + Math.max(0.001, (s.ampAttack ?? 0.01) + (s.ampDecay ?? 0.1)));
           gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
         } else {
-          gainNode.gain.setValueAtTime(peakGain, startTime);
+          gainNode.gain.setValueAtTime(safePeakGain, startTime);
         }
 
         source.connect(filterNode);

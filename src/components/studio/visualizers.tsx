@@ -7,8 +7,9 @@ import { Activity, Waves, Zap } from 'lucide-react';
 export const VisualEnvelope = ({ attack, release }: { attack?: number, release?: number }) => {
   const att = attack ?? 0.01;
   const rel = release ?? 0.1;
-  const a = (att / 3) * 100;
-  const r = (rel / 3) * 100;
+  // Safety checks for NaN
+  const a = isNaN(att) ? 0.01 : (att / 3) * 100;
+  const r = isNaN(rel) ? 0.1 : (rel / 3) * 100;
   
   return (
     <div className="h-24 w-40 bg-black/60 rounded-xl border border-primary/10 overflow-hidden relative shadow-inner">
@@ -31,8 +32,8 @@ export const VisualFilterCurve = ({ cutoff, resonance, type }: { cutoff?: number
   const resVal = resonance ?? 0.2;
   const t = type ?? 'lowpass';
   
-  const c = cut * 100;
-  const res = resVal * 40;
+  const c = isNaN(cut) ? 100 : cut * 100;
+  const res = isNaN(resVal) ? 8 : resVal * 40;
   
   let d = '';
   if (t === 'lowpass') {
@@ -76,8 +77,9 @@ export const VisualLFO = ({ rate, delay }: { rate?: number, delay?: number }) =>
   }, []);
 
   const points = [];
+  const safeRate = isNaN(rVal) ? 1 : rVal;
   for (let x = 0; x <= 100; x += 2) {
-    const y = 50 + Math.sin((x + (time / 2)) * rVal * 0.5) * 30;
+    const y = 50 + Math.sin((x + (time / 2)) * safeRate * 0.5) * 30;
     points.push(`${x},${y}`);
   }
 
@@ -127,7 +129,7 @@ export const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }
     };
 
     draw();
-    return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
+    return () => { if (animationRef.current) (typeof window !== 'undefined') && window.cancelAnimationFrame(animationRef.current!); };
   }, [analyser]);
 
   return (
