@@ -573,8 +573,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 />
               </div>
            </div>
-           <div className="w-px h-8 bg-white/10" />
-           <div className="w-40 h-8">
+           <div className="w-px h-8 backdrop-blur-sm bg-white/10" />
+           <div className="w-40  h-8">
               <MasterVisualizer analyser={masterAnalyserRef.current} />
            </div>
         </div>
@@ -588,7 +588,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       </div>
 
       {/* CHANNEL RACK WINDOW */}
-      <div className="flex-1 flex flex-col bg-[#1e2329] rounded-sm daw-button-outer overflow-hidden m-4 border border-white/10 shadow-2xl relative">
+      <div className="flex-1  flex flex-col bg-[#1e2329] rounded-sm daw-button-outer overflow-hidden m-4 border border-white/10 shadow-2xl relative">
         <div className="h-8 bg-[#2d333b] border-b border-black flex items-center justify-between px-3 shrink-0 z-30">
           <div className="flex items-center gap-2">
             <ChevronDown className="w-3 h-3 text-muted-foreground" />
@@ -601,9 +601,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         </div>
 
         {/* SEQUENCER AREA WITH STICKY HEADERS */}
-        <div 
+        <div className=' h-[300px] max-h-[300px] overflow-y-auto custom-scrollbar ' >
+ <div 
          
-          className="flex w-full max-w-full overflow-x-hidden overflow-y-auto custom-scrollbar relative"
+          className="flex w-full h-auto max-w-full overflow-x-hidden overflow-y-auto custom-scrollbar relative"
         >
           <div className="w-[270px]    max-w-[270px] overflow-hidden flex flex-col">
             {Array.from({ length: numChannels }).map((_, chIdx) => {
@@ -785,6 +786,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
             }
           </div>
         </div>
+        </div>
+       
 
         {/* GRAPH EDITOR PANEL - SYNCHRONIZED SCROLL */}
         <div className="h-auto bg-[#1a1f25] border-t border-black p-3 flex flex-col gap-3 shadow-inner shrink-0 z-30">
@@ -820,7 +823,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
              className="flex-1  ml-[265px]  w-full   relative"
            >
               <div  ref={graphContainerRef}
-             onScroll={handleGraphScroll} className="flex custom-scrollbar gap-1 items-start h-[400px] w-auto max-w-[768px] px-2  overflow-y-hidden overflow-x-auto custom- "> {/* Match the sticky control section width */}
+             onScroll={handleGraphScroll} className="flex custom-scrollbar gap-1 items-start h-[200px] w-auto max-w-[768px] px-2  overflow-y-hidden overflow-x-auto custom- "> {/* Match the sticky control section width */}
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const notes = grid[`${selectedChannelForGraph}-${stepIdx}`] || [];
                   const val = getGraphValue(stepIdx);
@@ -838,8 +841,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                             const rect = e.currentTarget.parentElement?.getBoundingClientRect();
                             if (!rect) return;
                             const handleMove = (me: MouseEvent) => {
-                              const raw = Math.max(0, Math.min(1, 1 - (me.clientY - rect.top) / rect.height));
-                              updateGraphValue(stepIdx, raw);
+                              const raw = Math.max(0, Math.min(1, 1 - (me.clientY - rect.top) / (rect.height)));
+                              updateGraphValue(stepIdx, raw*2);
                             };
                             const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
                             window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
