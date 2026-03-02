@@ -246,10 +246,17 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
           filterNode.type = s.svfType || 'lowpass';
           const baseFreq = Math.max(20, 20 + (Math.pow(s.svfCut ?? 1, 2) * 19980));
           const peakFreq = Math.min(20000, baseFreq * (1 + ((s.svfEnv ?? 0) * 10)));
+
+          // console.log(`Filter Settings - Type: ${filterNode.type}, Base Freq: ${baseFreq.toFixed(2)} Hz, Peak Freq: ${peakFreq.toFixed(2)} Hz, Emphasis: ${(s.svfEmph ?? 0.2) * 20}`);
+
           filterNode.frequency.setValueAtTime(baseFreq, startTime);
           filterNode.frequency.exponentialRampToValueAtTime(peakFreq, startTime + Math.max(0.001, s.svfAttack ?? 0.01));
           filterNode.frequency.exponentialRampToValueAtTime(Math.max(20, peakFreq * (s.svfSustain ?? 0.5)), startTime + Math.max(0.001, (s.svfAttack ?? 0.01) + (s.svfDecay ?? 0.1)));
           filterNode.Q.setValueAtTime((s.svfEmph ?? 0.2) * 20, startTime);
+
+          // console.log(`Applied Filter Envelope - Attack: ${s.svfAttack}s, Decay: ${s.svfDecay}s, Sustain: ${s.svfSustain}, Release: ${s.svfRelease}s`);
+          // console.log(`Applied Filter Modulation - LFO: ${s.svfLfo}, Envelope: ${s.svfEnv}, Keytrack: ${s.svfKb}`);
+          // console.log(`Applied Filter:`,filterNode);
         } else {
           filterNode.type = 'allpass';
         }
@@ -336,6 +343,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
   };
 
 
+  console.log(masterAnalyserRef)
 
   return (
     <div className="space-y-12">

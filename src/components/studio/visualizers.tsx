@@ -116,7 +116,7 @@ export const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }
       analyser.getByteFrequencyData(dataArray);
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const barWidth = (canvas.width / bufferLength) * 2.5;
+      const barWidth = (canvas.width / bufferLength) * 1.5;
       let barHeight;
       let x = 0;
 
@@ -124,7 +124,7 @@ export const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }
         barHeight = (dataArray[i] / 255) * canvas.height;
         ctx.fillStyle = `rgba(250, 204, 21, ${0.1 + (dataArray[i] / 255) * 0.8})`;
         ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-        x += barWidth + 1;
+        x += barWidth + 2.5;
       }
     };
 
