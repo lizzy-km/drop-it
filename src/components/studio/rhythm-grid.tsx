@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -9,7 +8,8 @@ import {
   ChevronDown, MoreHorizontal, Power, 
   BarChart3, Music2, Wand2, Download, Upload,
   ListMusic, SlidersHorizontal, MousePointer2,
-  FileDown, FileUp, ChevronRight
+  FileDown, FileUp, ChevronRight, ArrowLeftRight,
+  RefreshCcw, Eraser, Dice5, MoveHorizontal
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings, NoteProperty } from '@/lib/db';
 import { cn } from '@/lib/utils';
@@ -29,6 +29,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 
 const DEFAULT_CHANNELS = 8;
@@ -63,6 +64,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const [title, setTitle] = useState(track?.title || 'UNNAMED_PATTERN_1');
   const [selectedChannelForGraph, setSelectedChannelForGraph] = useState(0);
   const [activeGraphProperty, setActiveGraphProperty] = useState<GraphProperty>('velocity');
+  
+  // DRAG-TO-PAINT STATE
+  const [isMouseDown, setIsMouseDown] = useState(false);
+  const [lastToggledStep, setLastToggledStep] = useState<string | null>(null);
 
   const [channelSettings, setChannelSettings] = useState<Record<string, ChannelSettings>>(() => {
     const base: Record<string, ChannelSettings> = {};
@@ -202,14 +207,15 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     return () => { if (schedulerTimerRef.current) clearInterval(schedulerTimerRef.current); };
   }, [isPlaying, schedule, initAudio]);
 
-  const toggleStep = (chIdx: number, stepIdx: number) => {
+  // SEQUENCER TOOLS
+  const toggleStep = useCallback((chIdx: number, stepIdx: number, force?: boolean) => {
     const clipId = selectedClips[chIdx.toString()];
-    if (!clipId) {
-      toast({ title: "No Clip Assigned", description: "Select a sound for this channel first.", variant: "destructive" });
-      return;
-    }
+    if (!clipId) return;
 
     const key = `${chIdx}-${stepIdx}`;
+    if (lastToggledStep === key && !force) return;
+    setLastToggledStep(key);
+
     const current = grid[key] || [];
     const exists = current.find(n => n.clipId === clipId);
 
@@ -227,9 +233,81 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         cutoffOffset: 0,
         resOffset: 0
       }];
-      playNote(newGrid[key][newGrid[key].length - 1], chIdx.toString(), (audioContextRef.current?.currentTime || 0) + 0.05);
+      if (!isPlaying) {
+        playNote(newGrid[key][newGrid[key].length - 1], chIdx.toString(), (audioContextRef.current?.currentTime || 0) + 0.05);
+      }
     }
     setGrid(newGrid);
+  }, [selectedClips, grid, isPlaying, lastToggledStep, playNote]);
+
+  // CHANNEL ALGORITHMIC TOOLS
+  const shiftChannel = (chIdx: number, direction: 'left' | 'right') => {
+    const newGrid = { ...grid };
+    const temp: NoteProperty[][] = new Array(numSteps);
+    
+    // Extract channel notes
+    for (let s = 0; s < numSteps; s++) {
+      const key = `${chIdx}-${s}`;
+      temp[s] = newGrid[key] ? [...newGrid[key]] : [];
+      delete newGrid[key];
+    }
+
+    // Shift
+    for (let s = 0; s < numSteps; s++) {
+      let target;
+      if (direction === 'left') target = (s - 1 + numSteps) % numSteps;
+      else target = (s + 1) % numSteps;
+      
+      if (temp[s].length > 0) {
+        newGrid[`${chIdx}-${target}`] = temp[s];
+      }
+    }
+    setGrid(newGrid);
+    toast({ title: `Channel Shifted ${direction.toUpperCase()}` });
+  };
+
+  const mirrorChannel = (chIdx: number) => {
+    const newGrid = { ...grid };
+    const temp: NoteProperty[][] = new Array(numSteps);
+    
+    for (let s = 0; s < numSteps; s++) {
+      const key = `${chIdx}-${s}`;
+      temp[s] = newGrid[key] ? [...newGrid[key]] : [];
+      delete newGrid[key];
+    }
+
+    for (let s = 0; s < numSteps; s++) {
+      const target = (numSteps - 1) - s;
+      if (temp[s].length > 0) {
+        newGrid[`${chIdx}-${target}`] = temp[s];
+      }
+    }
+    setGrid(newGrid);
+    toast({ title: "Channel Pattern Reversed" });
+  };
+
+  const humanizeChannel = (chIdx: number) => {
+    const newGrid = { ...grid };
+    for (let s = 0; s < numSteps; s++) {
+      const key = `${chIdx}-${s}`;
+      if (newGrid[key]) {
+        newGrid[key] = newGrid[key].map(n => ({
+          ...n,
+          velocity: Math.max(0.1, Math.min(1.0, n.velocity + (Math.random() * 0.2 - 0.1)))
+        }));
+      }
+    }
+    setGrid(newGrid);
+    toast({ title: "Velocity Humanized" });
+  };
+
+  const clearChannel = (chIdx: number) => {
+    const newGrid = { ...grid };
+    for (let s = 0; s < numSteps; s++) {
+      delete newGrid[`${chIdx}-${s}`];
+    }
+    setGrid(newGrid);
+    toast({ title: "Channel Cleared" });
   };
 
   const handleSave = () => {
@@ -249,76 +327,40 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const currentTrack: Track = {
         id: track?.id || crypto.randomUUID(),
         userId: user.id,
-        title,
-        bpm,
-        numChannels,
-        numSteps,
-        grid,
-        channelSettings,
-        selectedClips,
-        createdAt: Date.now()
+        title, bpm, numChannels, numSteps, grid,
+        channelSettings, selectedClips, createdAt: Date.now()
       };
-      
-      const projectData = {
-        type: "DROPIT_PROJECT",
-        version: "1.0",
-        timestamp: Date.now(),
-        track: currentTrack
-      };
-      
-      const jsonString = JSON.stringify(projectData, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
+      const projectData = { type: "DROPIT_PROJECT", version: "1.0", track: currentTrack };
+      const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      
       const a = document.createElement('a');
-      a.style.display = 'none';
       a.href = url;
       a.download = `${title.toLowerCase().replace(/\s+/g, '_')}_project.json`;
-      
       document.body.appendChild(a);
       a.click();
-      
-      setTimeout(() => {
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-      }, 0);
-      
-      toast({ title: "Project Saved to Device" });
-    } catch (err) {
-      console.error("Export Error:", err);
-      toast({ title: "Export Failed", variant: "destructive" });
-    }
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "Project Exported" });
+    } catch (err) { toast({ title: "Export Failed", variant: "destructive" }); }
   };
 
   const handleImportProject = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
-        if (data.type !== "DROPIT_PROJECT" || !data.track) {
-           throw new Error("Invalid project format");
+        if (data.type === "DROPIT_PROJECT") {
+          const t = data.track;
+          setTitle(t.title); setBpm(t.bpm); setNumSteps(t.numSteps); setNumChannels(t.numChannels);
+          setGrid(t.grid); setChannelSettings(t.channelSettings); setSelectedClips(t.selectedClips);
+          toast({ title: "Project Loaded" });
         }
-        
-        const t = data.track;
-        setTitle(t.title || 'Imported Pattern');
-        setBpm(t.bpm || 120);
-        setNumSteps(t.numSteps || 16);
-        setNumChannels(t.numChannels || 8);
-        setGrid(t.grid || {});
-        setChannelSettings(t.channelSettings || {});
-        setSelectedClips(t.selectedClips || {});
-        
-        toast({ title: "Project Loaded Successfully" });
-      } catch (err) {
-        console.error("Import Error:", err);
-        toast({ title: "Import Error", description: "Unsupported or corrupted project file.", variant: "destructive" });
-      }
+      } catch (err) { toast({ title: "Import Error", variant: "destructive" }); }
     };
     reader.readAsText(file);
-    e.target.value = ''; // Reset for next selection
+    e.target.value = '';
   };
 
   const handleRandomize = () => {
@@ -328,15 +370,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       if (!clipId) continue;
       for (let s = 0; s < numSteps; s++) {
         if (Math.random() > 0.8) {
-          newGrid[`${ch}-${s}`] = [{ 
-            id: crypto.randomUUID(), 
-            clipId, 
-            velocity: 0.6 + Math.random() * 0.4, 
-            finePitch: 0,
-            panOffset: 0,
-            cutoffOffset: 0,
-            resOffset: 0
-          }];
+          newGrid[`${ch}-${s}`] = [{ id: crypto.randomUUID(), clipId, velocity: 0.6 + Math.random() * 0.4, finePitch: 0, panOffset: 0, cutoffOffset: 0, resOffset: 0 }];
         }
       }
     }
@@ -347,17 +381,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const changeClip = (chIdx: string, clipId: string) => {
     setSelectedClips(prev => ({ ...prev, [chIdx]: clipId }));
     const clip = clips.find(c => c.id === clipId);
-    if (clip) {
-      playNote({ 
-        id: 'preview', 
-        clipId, 
-        velocity: 1, 
-        finePitch: 0,
-        panOffset: 0,
-        cutoffOffset: 0,
-        resOffset: 0
-      }, chIdx, (audioContextRef.current?.currentTime || 0));
-    }
+    if (clip) playNote({ id: 'preview', clipId, velocity: 1, finePitch: 0, panOffset: 0, cutoffOffset: 0, resOffset: 0 }, chIdx, (audioContextRef.current?.currentTime || 0));
   };
 
   const getGraphValue = (stepIdx: number): number => {
@@ -378,7 +402,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     const key = `${selectedChannelForGraph}-${stepIdx}`;
     const currentNotes = grid[key];
     if (!currentNotes || currentNotes.length === 0) return;
-
     const newGrid = { ...grid };
     newGrid[key] = currentNotes.map(n => {
       const updated = { ...n };
@@ -395,7 +418,11 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   };
 
   return (
-    <div className="flex flex-col gap-1 h-full select-none">
+    <div 
+      className="flex flex-col gap-1 h-full select-none"
+      onMouseUp={() => { setIsMouseDown(false); setLastToggledStep(null); }}
+      onMouseLeave={() => { setIsMouseDown(false); setLastToggledStep(null); }}
+    >
       <input type="file" ref={fileInputRef} onChange={handleImportProject} accept=".json" className="hidden" />
       
       {/* DAW TOOLBAR */}
@@ -501,10 +528,39 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 )}
                 onClick={() => setSelectedChannelForGraph(chIdx)}
               >
-                <button 
-                  onClick={(e) => { e.stopPropagation(); setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], muted: !s.muted }})); }}
-                  className={cn("w-3 h-3 rounded-full border border-black daw-button-inner transition-colors shrink-0", s.muted ? "bg-red-900/40" : "bg-primary shadow-[0_0_6px_rgba(255,153,0,0.6)]")} 
-                />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], muted: !s.muted }})); }}
+                    className={cn("w-3 h-3 rounded-full border border-black daw-button-inner transition-colors shrink-0", s.muted ? "bg-red-900/40" : "bg-primary shadow-[0_0_6px_rgba(255,153,0,0.6)]")} 
+                  />
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="text-muted-foreground hover:text-primary transition-colors">
+                        <MoreHorizontal className="w-3 h-3" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="glass-panel border-primary/20 bg-black/90 p-1 min-w-[140px]">
+                      <DropdownMenuItem onClick={() => shiftChannel(chIdx, 'left')} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
+                        <ArrowLeftRight className="w-3 h-3 mr-2 rotate-180" /> Shift Left
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => shiftChannel(chIdx, 'right')} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
+                        <ArrowLeftRight className="w-3 h-3 mr-2" /> Shift Right
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-white/5" />
+                      <DropdownMenuItem onClick={() => mirrorChannel(chIdx)} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
+                        <RefreshCcw className="w-3 h-3 mr-2" /> Reverse Pattern
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => humanizeChannel(chIdx)} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
+                        <Dice5 className="w-3 h-3 mr-2" /> Humanize Velocity
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-white/5" />
+                      <DropdownMenuItem onClick={() => clearChannel(chIdx)} className="text-[9px] font-black uppercase text-destructive hover:bg-destructive/10 cursor-pointer">
+                        <Eraser className="w-3 h-3 mr-2" /> Clear Pattern
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
                 
                 <div className="flex items-center gap-1 shrink-0">
                   <div className="w-6 h-6 rounded-full bg-[#111] daw-button-inner flex items-center justify-center relative cursor-ns-resize group/knob"
@@ -561,7 +617,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                     return (
                       <button
                         key={stepIdx}
-                        onClick={(e) => { e.stopPropagation(); toggleStep(chIdx, stepIdx); }}
+                        onMouseDown={(e) => { e.stopPropagation(); setIsMouseDown(true); toggleStep(chIdx, stepIdx, true); }}
+                        onMouseEnter={() => { if (isMouseDown) toggleStep(chIdx, stepIdx); }}
                         className={cn(
                           "flex-1 h-6 rounded-[1px] transition-all transform active:scale-95 daw-button-outer",
                           isActive ? "step-active" : (isGroupLight ? "step-inactive-light" : "step-inactive-dark"),
