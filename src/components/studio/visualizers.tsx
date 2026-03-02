@@ -1,21 +1,21 @@
-
 "use client";
 
 import React, { useEffect, useRef } from 'react';
 import { Activity, Waves, Zap } from 'lucide-react';
 
 export const VisualEnvelope = ({ attack, release }: { attack?: number, release?: number }) => {
-  const att = attack ?? 0.01;
-  const rel = release ?? 0.1;
-  // Safety checks for NaN
-  const a = isNaN(att) ? 0.01 : (att / 3) * 100;
-  const r = isNaN(rel) ? 0.1 : (rel / 3) * 100;
+  const att = attack || 0.01;
+  const rel = release || 0.1;
+  
+  // Safety checks for NaN or infinite values
+  const safeAtt = isNaN(att) ? 1 : Math.max(0.1, (att / 3) * 100);
+  const safeRel = isNaN(rel) ? 10 : Math.max(0.1, (rel / 3) * 100);
   
   return (
-    <div className="h-24 w-40 bg-black/60 rounded-xl border border-primary/10 overflow-hidden relative shadow-inner">
+    <div className="h-24 w-full bg-black/60 rounded-xl border border-primary/10 overflow-hidden relative shadow-inner">
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full">
         <path 
-          d={`M 0 100 L ${Math.max(0, a)} 0 L ${Math.min(100, 100 - r)} 0 L 100 100 Z`}
+          d={`M 0 100 L ${safeAtt} 0 L ${100 - safeRel} 0 L 100 100 Z`}
           fill="rgba(250, 204, 21, 0.2)"
           stroke="hsl(var(--primary))"
           strokeWidth="2"
@@ -28,12 +28,12 @@ export const VisualEnvelope = ({ attack, release }: { attack?: number, release?:
 };
 
 export const VisualFilterCurve = ({ cutoff, resonance, type }: { cutoff?: number, resonance?: number, type?: string }) => {
-  const cut = cutoff ?? 1;
-  const resVal = resonance ?? 0.2;
-  const t = type ?? 'lowpass';
+  const cut = cutoff || 1;
+  const resVal = resonance || 0.2;
+  const t = type || 'lowpass';
   
-  const c = isNaN(cut) ? 100 : cut * 100;
-  const res = isNaN(resVal) ? 8 : resVal * 40;
+  const c = isNaN(cut) ? 100 : Math.max(0, Math.min(100, cut * 100));
+  const res = isNaN(resVal) ? 8 : Math.max(1, resVal * 40);
   
   let d = '';
   if (t === 'lowpass') {
@@ -55,7 +55,7 @@ export const VisualFilterCurve = ({ cutoff, resonance, type }: { cutoff?: number
           strokeWidth="3"
           className="transition-all duration-300"
         />
-        <circle cx={isNaN(c) ? 50 : c} cy={isNaN(100 - (res / 2)) ? 50 : 100 - (res / 2)} r="2" fill="white" className="animate-pulse" />
+        <circle cx={c} cy={Math.max(0, 100 - (res / 2))} r="2" fill="white" className="animate-pulse" />
       </svg>
       <div className="absolute top-2 left-4 text-[7px] font-black uppercase text-primary/40 tracking-widest">SVF_RESPONSE</div>
     </div>
@@ -63,7 +63,7 @@ export const VisualFilterCurve = ({ cutoff, resonance, type }: { cutoff?: number
 };
 
 export const VisualLFO = ({ rate, delay }: { rate?: number, delay?: number }) => {
-  const rVal = rate ?? 1;
+  const rVal = rate || 1;
   const [time, setTime] = React.useState(0);
 
   useEffect(() => {
@@ -129,7 +129,7 @@ export const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }
     };
 
     draw();
-    return () => { if (animationRef.current) (typeof window !== 'undefined') && window.cancelAnimationFrame(animationRef.current!); };
+    return () => { if (animationRef.current) window.cancelAnimationFrame(animationRef.current); };
   }, [analyser]);
 
   return (

@@ -1,29 +1,30 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 10%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 20%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 48 100% 50%;
+    --background: 215 15% 15%;
+    --foreground: 0 0% 90%;
+    --card: 215 15% 18%;
+    --card-foreground: 0 0% 90%;
+    --popover: 215 15% 12%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 38 92% 50%;
     --primary-foreground: 0 0% 0%;
-    --secondary: 0 0% 15%;
+    --secondary: 215 15% 25%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 48 100% 50%;
+    --muted: 215 10% 20%;
+    --muted-foreground: 215 10% 60%;
+    --accent: 38 92% 50%;
     --accent-foreground: 0 0% 0%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 48 100% 50% / 0.15;
-    --input: 0 0% 14.9%;
-    --ring: 48 100% 50%;
-    --radius: 1.5rem;
+    --border: 215 10% 25%;
+    --input: 215 10% 20%;
+    --ring: 38 92% 50%;
+    --radius: 0.25rem;
   }
 }
 
@@ -33,51 +34,61 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   }
+}
+
+/* FL Studio Inspired Bevels */
+.daw-button-outer {
+  box-shadow: inset 1px 1px 1px rgba(255,255,255,0.1), 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+.daw-button-inner {
+  box-shadow: inset -1px -1px 1px rgba(255,255,255,0.05), inset 2px 2px 4px rgba(0,0,0,0.4);
+}
+
+.step-active {
+  background: linear-gradient(to bottom, #ff9900, #cc7a00);
+  box-shadow: 0 0 8px rgba(255, 153, 0, 0.4);
+}
+
+.step-inactive-dark {
+  background: linear-gradient(to bottom, #444, #333);
+}
+
+.step-inactive-light {
+  background: linear-gradient(to bottom, #666, #555);
+}
+
+.knob-track {
+  @apply relative rounded-full bg-black shadow-inner overflow-hidden border border-white/5;
+}
+
+.knob-indicator {
+  @apply absolute bottom-0 left-0 w-full bg-primary/40 transition-all;
 }
 
 .studio-grid-bg {
   background-image: 
-    linear-gradient(to right, hsl(var(--primary) / 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, hsl(var(--primary) / 0.05) 1px, transparent 1px);
-  background-size: 60px 60px;
+    linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
-@keyframes bounce-subtle {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-
-.animate-bounce-subtle {
-  animation: bounce-subtle 2s infinite ease-in-out;
-}
-
-.glass-panel {
-  @apply bg-card/90 backdrop-blur-xl border border-primary/20 shadow-2xl;
-}
-
-.gold-border {
-  @apply border border-primary/30;
-}
-
-.gold-shadow {
-  @apply shadow-[0_0_20px_rgba(250,204,21,0.1)];
-}
-
-::-webkit-scrollbar {
+.custom-scrollbar::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-::-webkit-scrollbar-track {
-  @apply bg-black/20;
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #111;
 }
 
-::-webkit-scrollbar-thumb {
-  @apply bg-primary/20 rounded-full hover:bg-primary/40 transition-colors;
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
 }
 
-div[role="dialog"] {
-  z-index: 9999;
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #444;
 }
