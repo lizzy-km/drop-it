@@ -475,17 +475,35 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     setGrid(newGrid);
   };
 
-  const handleSequencerScroll = (e: React.UIEvent<HTMLDivElement>) => {
+  function throttle(func: Function, limit: number) {
+  let inThrottle:boolean; 
+  return function(...args: any[]) {
+    if (!inThrottle) {
+      func.apply(this, args); 
+      inThrottle = true;     
+
+     
+      setTimeout(() => inThrottle = false, limit);
+    }
+  }
+}
+
+
+
+  const handleSequencerScroll =throttle( (e: React.UIEvent<HTMLDivElement>) => {
     if (graphContainerRef.current) {
+      // console.log("Sequencer scrolled", e.currentTarget.scrollLeft);
+
       graphContainerRef.current.scrollLeft = e.currentTarget.scrollLeft;
     }
-  };
+  }, 20);
 
-  const handleGraphScroll = (e: React.UIEvent<HTMLDivElement>) => {
+  const handleGraphScroll =throttle( (e: React.UIEvent<HTMLDivElement>) => {
     if (stepContainerRef.current) {
+      // console.log("Graph scrolled", e.currentTarget.scrollLeft);
       stepContainerRef.current.scrollLeft = e.currentTarget.scrollLeft;
     }
-  };
+  }, 20);
 
   return (
     <div 
@@ -584,8 +602,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
         {/* SEQUENCER AREA WITH STICKY HEADERS */}
         <div 
-          ref={stepContainerRef}
-          onScroll={handleSequencerScroll}
+         
           className="flex w-full max-w-full overflow-x-hidden overflow-y-auto custom-scrollbar relative"
         >
           <div className="w-[270px]    max-w-[270px] overflow-hidden flex flex-col">
@@ -702,7 +719,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
             </Button>
           </div>
 
-          <div className=' flex flex-col  w-[85%] items-start justify-start h-full custom-scrollbar  max-w-[85%] overflow-auto ' >
+          <div
+            ref={stepContainerRef}
+          onScroll={handleSequencerScroll}
+           className=' flex flex-col  w-[100%] items-start justify-start h-full custom-scrollbar  max-w-[800px] overflow-auto ' >
             {
               Array.from({length:numChannels}).map((_,chIdx)=>{
                 const chKey = chIdx.toString();
@@ -767,7 +787,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         </div>
 
         {/* GRAPH EDITOR PANEL - SYNCHRONIZED SCROLL */}
-        <div className="h-48 bg-[#1a1f25] border-t border-black p-3 flex flex-col gap-3 shadow-inner shrink-0 z-30">
+        <div className="h-auto bg-[#1a1f25] border-t border-black p-3 flex flex-col gap-3 shadow-inner shrink-0 z-30">
            <div className="flex items-center justify-between px-2">
               <div className="flex gap-2 bg-black/40 p-1 rounded-xl border border-white/5">
                  {[
@@ -796,11 +816,11 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
            </div>
            
            <div 
-             ref={graphContainerRef}
-             onScroll={handleGraphScroll}
-             className="flex-1 w-full overflow-x-auto  relative"
+            
+             className="flex-1  ml-[265px]  w-full   relative"
            >
-              <div className="flex gap-1 items-start h-full min-w-full max-w-full overflow-auto  pl-[35%]"> {/* Match the sticky control section width */}
+              <div  ref={graphContainerRef}
+             onScroll={handleGraphScroll} className="flex custom-scrollbar gap-1 items-start h-[400px] w-auto max-w-[768px] px-2  overflow-y-hidden overflow-x-auto custom- "> {/* Match the sticky control section width */}
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const notes = grid[`${selectedChannelForGraph}-${stepIdx}`] || [];
                   const val = getGraphValue(stepIdx);
@@ -810,7 +830,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                     <div key={stepIdx} className="w-6 h-full flex flex-col justify-end group/bar relative shrink-0">
                        <div 
                           className={cn(
-                            "w-full rounded-t-sm transition-all daw-button-outer cursor-ns-resize", 
+                            "w-full rounded-t-md transition-all  daw-button-outer cursor-ns-resize", 
                             isActive ? "bg-primary/60 group-hover/bar:bg-primary shadow-[0_0_10px_rgba(255,153,0,0.2)]" : "bg-white/5"
                           )}
                           style={{ height: `${isActive ? (val * 100) : 0}%` }}

@@ -158,8 +158,8 @@ export function ChannelSettingsDialog({ channelIdx, settings: s, onUpdate, onBat
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl text-primary/40 hover:text-black">
-          <Sliders className="w-5 h-5" />
+        <Button variant="ghost" size="icon" className="h-5 w-5 rounded-md p-1 text-primary/40 hover:text-black">
+          <Sliders className="w-3 h-3" />
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-6xl glass-panel border-primary/20 rounded-[3rem] p-12 gold-shadow">
