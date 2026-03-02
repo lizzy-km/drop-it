@@ -245,47 +245,80 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   };
 
   const handleExportProject = () => {
-    const projectData = {
-      type: "DROPIT_PROJECT",
-      version: "1.1",
-      timestamp: Date.now(),
-      data: { title, bpm, numChannels, numSteps, grid, channelSettings, selectedClips }
-    };
-    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.toLowerCase().replace(/\s+/g, '_')}_project.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast({ title: "Project Exported", description: "Config JSON saved to your device." });
+    try {
+      const currentTrack: Track = {
+        id: track?.id || crypto.randomUUID(),
+        userId: user.id,
+        title,
+        bpm,
+        numChannels,
+        numSteps,
+        grid,
+        channelSettings,
+        selectedClips,
+        createdAt: Date.now()
+      };
+      
+      const projectData = {
+        type: "DROPIT_PROJECT",
+        version: "1.0",
+        timestamp: Date.now(),
+        track: currentTrack
+      };
+      
+      const jsonString = JSON.stringify(projectData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `${title.toLowerCase().replace(/\s+/g, '_')}_project.json`;
+      
+      document.body.appendChild(a);
+      a.click();
+      
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 0);
+      
+      toast({ title: "Project Saved to Device" });
+    } catch (err) {
+      console.error("Export Error:", err);
+      toast({ title: "Export Failed", variant: "destructive" });
+    }
   };
 
   const handleImportProject = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const json = JSON.parse(event.target?.result as string);
-        if (json.type !== "DROPIT_PROJECT") throw new Error("Invalid project format");
-        const { data } = json;
-        setTitle(data.title || 'IMPORTED_PROJECT');
-        setBpm(data.bpm || 130);
-        setNumSteps(data.numSteps || 16);
-        setNumChannels(data.numChannels || DEFAULT_CHANNELS);
-        setGrid(data.grid || {});
-        setChannelSettings(data.channelSettings || {});
-        setSelectedClips(data.selectedClips || {});
-        toast({ title: "Project Imported Successfully" });
+        const data = JSON.parse(event.target?.result as string);
+        if (data.type !== "DROPIT_PROJECT" || !data.track) {
+           throw new Error("Invalid project format");
+        }
+        
+        const t = data.track;
+        setTitle(t.title || 'Imported Pattern');
+        setBpm(t.bpm || 120);
+        setNumSteps(t.numSteps || 16);
+        setNumChannels(t.numChannels || 8);
+        setGrid(t.grid || {});
+        setChannelSettings(t.channelSettings || {});
+        setSelectedClips(t.selectedClips || {});
+        
+        toast({ title: "Project Loaded Successfully" });
       } catch (err) {
-        toast({ title: "Import Failed", variant: "destructive", description: "Incompatible JSON schema." });
+        console.error("Import Error:", err);
+        toast({ title: "Import Error", description: "Unsupported or corrupted project file.", variant: "destructive" });
       }
     };
     reader.readAsText(file);
-    e.target.value = '';
+    e.target.value = ''; // Reset for next selection
   };
 
   const handleRandomize = () => {
