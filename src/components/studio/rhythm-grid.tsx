@@ -1,157 +1,76 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  Play, Square, Music, Save, Download, Plus, Trash2,
-  Loader2, Zap, Waves, Sparkles, Mic2, VolumeX, Volume2,
-  RotateCcw, Scissors, Timer, Settings, Volume1, Maximize2,
-  Gauge, Activity, Sliders, Repeat,
-  ChevronRight, ArrowRightLeft, FastForward, Clock, FileUp, FileDown,
-  Dices, ArrowLeft, ArrowRight, Copy, X, AlertTriangle, Wand2,
-  Upload, DownloadCloud
+  Play, Square, Save, Trash2, Plus, 
+  Settings, Volume2, Activity, Maximize2,
+  ChevronDown, MoreHorizontal, Power, 
+  BarChart3, Music2
 } from 'lucide-react';
-import { db, User, AudioClip, Track, ChannelSettings } from '@/lib/db';
+import { db, User, AudioClip, Track, ChannelSettings, NoteProperty } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { Slider } from '@/components/ui/slider';
-import { makeDistortionCurve, audioBufferToWav } from '@/lib/audio-utils';
 import { MasterVisualizer } from './visualizers';
-import { CHARACTER_TYPES } from '@/components/character-icons';
 import { ChannelSettingsDialog } from './channel-settings-dialog';
+import { GraphEditor } from './graph-editor';
 
 const DEFAULT_CHANNELS = 8;
 const MAX_STEPS = 64;
 
-const CHANNEL_COLORS = [
-  { name: 'Gold', class: 'bg-primary', hex: '#facc15' },
-  { name: 'Electric', class: 'bg-cyan-400', hex: '#22d3ee' },
-  { name: 'Vibrant', class: 'bg-rose-500', hex: '#f43f5e' },
-  { name: 'Neon', class: 'bg-lime-400', hex: '#a3e635' },
-  { name: 'Spirit', class: 'bg-indigo-500', hex: '#6366f1' },
-];
-
 const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
-  volume: 0.8,
-  pitch: 1.0,
-  delay: 0,
-  reverb: 0,
-  pan: 0,
-  cutoff: 1.0,
-  distortion: 0,
-  autoTune: 0,
-  color: 'bg-primary',
-  muted: false,
-  reversed: false,
-  
-  // Bypass Flags
-  oscActive: true,
-  svfActive: true,
-  lfoActive: true,
-  fxActive: true,
-  ampActive: true,
-
-  // Synthesis Parameters
-  unison: 0,
-  vibrato: 0,
-
-  // OSC Lab
-  oscCoarse: 0,
-  oscFine: 0,
-  oscLevel: 1.0,
-  oscLfo: 0,
-  oscEnv: 0,
-  oscPw: 0,
-
-  // AMP Envelope
-  ampAttack: 0.01,
-  ampHold: 0,
-  ampDecay: 0.1,
-  ampSustain: 1.0,
-  ampRelease: 0.1,
-  ampLevel: 1.0,
-
-  // SVF
-  svfCut: 1.0,
-  svfEmph: 0.2,
-  svfEnv: 0,
-  svfLfo: 0,
-  svfKb: 0,
-  svfType: 'lowpass',
-  svfAttack: 0.01,
-  svfDecay: 0.1,
-  svfSustain: 0.5,
-  svfRelease: 0.1,
-
-  // LFO Lab
-  lfoRate: 1.0,
-  lfoDelay: 0,
-
-  // Limiter
-  limiterPre: 1.0,
-  limiterMix: 0,
-
-  // Legacy
-  attack: 0.01,
-  release: 0.1,
-  trimStart: 0,
-  trimEnd: 1,
+  volume: 0.8, pitch: 1.0, delay: 0, reverb: 0, pan: 0, cutoff: 1.0, distortion: 0, autoTune: 0,
+  color: 'bg-primary', muted: false, reversed: false,
+  oscActive: true, svfActive: true, lfoActive: true, fxActive: true, ampActive: true,
+  unison: 0, vibrato: 0, oscCoarse: 0, oscFine: 0, oscLevel: 1.0, oscLfo: 0, oscEnv: 0, oscPw: 0,
+  ampAttack: 0.01, ampHold: 0, ampDecay: 0.1, ampSustain: 1.0, ampRelease: 0.1, ampLevel: 1.0,
+  svfCut: 1.0, svfEmph: 0.2, svfEnv: 0, svfLfo: 0, svfKb: 0, svfType: 'lowpass',
+  svfAttack: 0.01, svfDecay: 0.1, svfSustain: 0.5, svfRelease: 0.1,
+  lfoRate: 1.0, lfoDelay: 0, limiterPre: 1.0, limiterMix: 0,
+  attack: 0.01, release: 0.1, trimStart: 0, trimEnd: 1,
 };
 
-export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }: {
+export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   user: User;
   clips: AudioClip[];
   track?: Track;
   onSaveTrack: (t: Track) => void;
-  onImportRefresh?: () => void;
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(-1);
   const [bpm, setBpm] = useState(track?.bpm || 130);
   const [numSteps, setNumSteps] = useState(track?.numSteps || 16);
   const [numChannels, setNumChannels] = useState(track?.numChannels || DEFAULT_CHANNELS);
-  const [grid, setGrid] = useState<Record<string, string[]>>(track?.grid || {});
-  const [title, setTitle] = useState(track?.title || 'NEW_PROJECT');
+  const [grid, setGrid] = useState<Record<string, NoteProperty[]>>(track?.grid || {});
+  const [title, setTitle] = useState(track?.title || 'UNNAMED_PATTERN_1');
+  const [selectedChannelForGraph, setSelectedChannelForGraph] = useState(0);
 
   const [channelSettings, setChannelSettings] = useState<Record<string, ChannelSettings>>(() => {
-    const baseSettings: Record<string, ChannelSettings> = {};
-    const count = Math.max(DEFAULT_CHANNELS, track?.numChannels || 0);
-    
-    for (let i = 0; i < count; i++) {
-      const key = i.toString();
-      const existing = track?.channelSettings?.[key];
-      baseSettings[key] = { 
-        ...DEFAULT_CHANNEL_SETTINGS, 
-        ...existing,
-        color: existing?.color || CHANNEL_COLORS[i % CHANNEL_COLORS.length].class 
-      };
+    const base: Record<string, ChannelSettings> = {};
+    for (let i = 0; i < 16; i++) {
+      base[i.toString()] = { ...DEFAULT_CHANNEL_SETTINGS, ...track?.channelSettings?.[i.toString()] };
     }
-    return baseSettings;
+    return base;
   });
 
-  const [selectedClipsForChannel, setSelectedClipsForChannel] = useState<Record<string, string>>(
-    track?.selectedClips ||
-    Object.fromEntries(Array.from({ length: DEFAULT_CHANNELS }).map((_, i) => [i.toString(), '']))
+  const [selectedClips, setSelectedClips] = useState<Record<string, string>>(
+    track?.selectedClips || Object.fromEntries(Array.from({ length: 16 }).map((_, i) => [i.toString(), '']))
   );
 
-  const schedulerTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const masterAnalyserRef = useRef<AnalyserNode | null>(null);
   const audioBuffersRef = useRef<Record<string, AudioBuffer>>({});
-
+  const schedulerTimerRef = useRef<NodeJS.Timeout | null>(null);
   const nextNoteTimeRef = useRef<number>(0);
   const currentStepRef = useRef<number>(0);
-  const lookAheadTime = 0.1;
-  const scheduleInterval = 25;
 
-  const initAudioContext = useCallback(() => {
+  const initAudio = useCallback(() => {
     if (!audioContextRef.current) {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      const compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.setValueAtTime(-12, ctx.currentTime);
-      compressor.connect(analyser);
+      analyser.fftSize = 256;
       analyser.connect(ctx.destination);
       masterAnalyserRef.current = analyser;
       audioContextRef.current = ctx;
@@ -159,315 +78,304 @@ export function RhythmGrid({ user, clips, track, onSaveTrack, onImportRefresh }:
     return audioContextRef.current;
   }, []);
 
-  const loadAudio = useCallback(async (clip: AudioClip, context?: BaseAudioContext) => {
+  const loadBuffer = async (clip: AudioClip, ctx: AudioContext) => {
     if (audioBuffersRef.current[clip.id]) return audioBuffersRef.current[clip.id];
-    const ctx = context || initAudioContext();
     try {
       const res = await fetch(clip.audioData);
-      const arrayBuffer = await res.arrayBuffer();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-      audioBuffersRef.current[clip.id] = audioBuffer;
-      return audioBuffer;
-    } catch (e) {
-      return null;
-    }
-  }, [initAudioContext]);
+      const ab = await res.arrayBuffer();
+      const buffer = await ctx.decodeAudioData(ab);
+      audioBuffersRef.current[clip.id] = buffer;
+      return buffer;
+    } catch (e) { return null; }
+  };
 
-  const playClip = useCallback(async (clipId: string, channelIdx: string, scheduledTime?: number, context?: BaseAudioContext) => {
-    const s = channelSettings[channelIdx] || DEFAULT_CHANNEL_SETTINGS;
-    if (s.muted && !scheduledTime) return;
+  const playNote = useCallback(async (note: NoteProperty, chIdx: string, time: number) => {
+    const ctx = initAudio();
+    const s = channelSettings[chIdx];
+    if (s.muted) return;
 
-    const clip = clips.find(c => c.id === clipId);
+    const clip = clips.find(c => c.id === note.clipId);
     if (!clip) return;
 
-    try {
-      const ctx = context || initAudioContext();
-      let buffer = await loadAudio(clip, ctx);
-      if (!buffer) return;
+    const buffer = await loadBuffer(clip, ctx);
+    if (!buffer) return;
 
-      const basePitch = s.pitch || 1.0;
-      const coarseMult = Math.pow(2, (s.oscCoarse || 0) / 12);
-      const fineMult = Math.pow(2, (s.oscFine || 0) / 1200);
-      const basePlaybackRate = Math.max(0.001, basePitch * coarseMult * fineMult);
-      
-      const startTime = scheduledTime !== undefined ? scheduledTime : ctx.currentTime;
-      const source = ctx.createBufferSource();
-      const gainNode = ctx.createGain();
-      const panNode = ctx.createStereoPanner();
-      const filterNode = ctx.createBiquadFilter();
+    const source = ctx.createBufferSource();
+    const gainNode = ctx.createGain();
+    const panNode = ctx.createStereoPanner();
+    const filterNode = ctx.createBiquadFilter();
 
-      source.buffer = buffer;
-      source.playbackRate.setValueAtTime(basePlaybackRate, startTime);
-      panNode.pan.setValueAtTime(s.pan ?? 0, startTime);
+    const basePitch = (s.pitch || 1.0) * Math.pow(2, (note.finePitch || 0) / 1200);
+    source.buffer = buffer;
+    source.playbackRate.setValueAtTime(basePitch, time);
 
-      if (s.svfActive) {
-        filterNode.type = s.svfType || 'lowpass';
-        const baseFreq = Math.max(20, 20 + (Math.pow(s.svfCut ?? 1, 2) * 19980));
-        filterNode.frequency.setValueAtTime(baseFreq, startTime);
-        filterNode.Q.setValueAtTime((s.svfEmph ?? 0.2) * 20, startTime);
-      } else {
-        filterNode.type = 'allpass';
-      }
-
-      const peakGain = Math.max(0.0001, (s.volume ?? 0.8));
-      gainNode.gain.setValueAtTime(peakGain, startTime);
-
-      source.connect(filterNode);
-      filterNode.connect(gainNode);
-      gainNode.connect(panNode);
-      panNode.connect(context ? context.destination : (masterAnalyserRef.current || ctx.destination));
-
-      source.start(startTime);
-    } catch (e) {
-      console.error(e);
+    panNode.pan.setValueAtTime(s.pan, time);
+    
+    if (s.svfActive) {
+      filterNode.type = s.svfType;
+      filterNode.frequency.setValueAtTime(20 + (Math.pow(s.svfCut, 2) * 19980), time);
+      filterNode.Q.setValueAtTime(s.svfEmph * 20, time);
+    } else {
+      filterNode.type = 'allpass';
     }
-  }, [clips, loadAudio, initAudioContext, channelSettings]);
 
-  const scheduleNextNote = useCallback(() => {
-    const ctx = initAudioContext();
-    const secondsPerBeat = 60.0 / Math.max(1, bpm);
-    const secondsPerStep = secondsPerBeat / 4;
+    const velocityGain = (note.velocity ?? 1.0) * s.volume;
+    gainNode.gain.setValueAtTime(velocityGain, time);
 
-    while (nextNoteTimeRef.current < ctx.currentTime + lookAheadTime) {
-      const stepToSchedule = currentStepRef.current;
-      for (let c = 0; c < numChannels; c++) {
-        const clipIds = grid[`${c}-${stepToSchedule}`];
-        if (clipIds) {
-          clipIds.forEach(id => playClip(id, c.toString(), nextNoteTimeRef.current));
+    source.connect(filterNode);
+    filterNode.connect(gainNode);
+    gainNode.connect(panNode);
+    panNode.connect(masterAnalyserRef.current || ctx.destination);
+
+    source.start(time);
+  }, [clips, channelSettings, initAudio]);
+
+  const schedule = useCallback(() => {
+    const ctx = initAudio();
+    const secondsPerStep = (60.0 / bpm) / 4;
+
+    while (nextNoteTimeRef.current < ctx.currentTime + 0.1) {
+      const step = currentStepRef.current;
+      for (let ch = 0; ch < numChannels; ch++) {
+        const notes = grid[`${ch}-${step}`];
+        if (notes) {
+          notes.forEach(n => playNote(n, ch.toString(), nextNoteTimeRef.current));
         }
       }
       nextNoteTimeRef.current += secondsPerStep;
       currentStepRef.current = (currentStepRef.current + 1) % numSteps;
-      setTimeout(() => setCurrentStep(stepToSchedule), (nextNoteTimeRef.current - ctx.currentTime) * 1000);
+      setTimeout(() => setCurrentStep(step), (nextNoteTimeRef.current - ctx.currentTime) * 1000);
     }
-  }, [bpm, grid, numChannels, numSteps, playClip, initAudioContext]);
+  }, [bpm, grid, numChannels, numSteps, playNote, initAudio]);
 
   useEffect(() => {
     if (isPlaying) {
-      const ctx = initAudioContext();
+      const ctx = initAudio();
       nextNoteTimeRef.current = ctx.currentTime;
       currentStepRef.current = 0;
-      schedulerTimerRef.current = setInterval(scheduleNextNote, scheduleInterval);
+      schedulerTimerRef.current = setInterval(schedule, 25);
     } else {
       if (schedulerTimerRef.current) clearInterval(schedulerTimerRef.current);
       setCurrentStep(-1);
     }
     return () => { if (schedulerTimerRef.current) clearInterval(schedulerTimerRef.current); };
-  }, [isPlaying, scheduleNextNote, initAudioContext]);
+  }, [isPlaying, schedule, initAudio]);
 
-  const updateChannelSetting = (idx: string, key: keyof ChannelSettings, val: any) => {
-    setChannelSettings(p => ({ ...p, [idx]: { ...p[idx], [key]: val } }));
+  const toggleStep = (chIdx: number, stepIdx: number) => {
+    const clipId = selectedClips[chIdx.toString()];
+    if (!clipId) return;
+
+    const key = `${chIdx}-${stepIdx}`;
+    const current = grid[key] || [];
+    const exists = current.find(n => n.clipId === clipId);
+
+    const newGrid = { ...grid };
+    if (exists) {
+      newGrid[key] = current.filter(n => n.clipId !== clipId);
+      if (newGrid[key].length === 0) delete newGrid[key];
+    } else {
+      newGrid[key] = [...current, { id: crypto.randomUUID(), clipId, velocity: 0.8, finePitch: 0 }];
+      playNote(newGrid[key][newGrid[key].length - 1], chIdx.toString(), (audioContextRef.current?.currentTime || 0) + 0.05);
+    }
+    setGrid(newGrid);
   };
 
   const handleSave = () => {
-    const newTrack: Track = {
+    const t: Track = {
       id: track?.id || crypto.randomUUID(),
       userId: user.id,
-      title,
-      bpm,
-      numChannels,
-      numSteps,
-      grid,
-      channelSettings,
-      selectedClips: selectedClipsForChannel,
-      createdAt: Date.now()
+      title, bpm, numChannels, numSteps, grid,
+      channelSettings, selectedClips, createdAt: Date.now()
     };
-    db.saveTrack(newTrack);
-    onSaveTrack(newTrack);
-    toast({ title: "DAW Session Saved" });
+    db.saveTrack(t);
+    onSaveTrack(t);
+    toast({ title: "Pattern Saved" });
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      {/* TRANSPORT SECTION */}
-      <div className="bg-[#0d0d0d] border border-white/5 rounded-[2.5rem] p-8 flex items-center justify-between gap-10 shadow-2xl">
-         <div className="flex items-center gap-6">
-            <Button
-              variant={isPlaying ? "destructive" : "default"}
-              className={cn("w-16 h-16 rounded-2xl shadow-xl transition-all", isPlaying ? "bg-red-500" : "bg-primary text-black")}
-              onClick={() => setIsPlaying(!isPlaying)}
-            >
-              {isPlaying ? <Square className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current ml-1" />}
-            </Button>
-            
-            <div className="flex flex-col gap-2">
-               <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Tempo</span>
-               <div className="flex items-center gap-4 bg-black px-4 py-2 rounded-xl border border-white/5">
-                  <Slider 
-                    value={[bpm]} 
-                    min={40} 
-                    max={220} 
-                    onValueChange={(v) => setBpm(v[0])} 
-                    className="w-24 h-1"
-                  />
-                  <input 
-                    type="number" 
-                    value={bpm} 
-                    onChange={(e) => setBpm(parseInt(e.target.value) || 120)}
-                    className="bg-transparent text-xl font-black text-primary outline-none w-16 text-center"
-                  />
-               </div>
-            </div>
+    <div className="flex flex-col gap-1 h-full select-none">
+      {/* DAW TOOLBAR */}
+      <div className="flex items-center justify-between bg-[#111] border-b border-white/5 p-1 h-12 shadow-md z-50">
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:bg-white/5">File</Button>
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:bg-white/5">Edit</Button>
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:bg-white/5">Add</Button>
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:bg-white/5">Patterns</Button>
+          <div className="w-px h-4 bg-white/10 mx-2" />
+          <Button 
+            onClick={() => setIsPlaying(!isPlaying)}
+            className={cn("h-8 w-8 rounded-sm daw-button-outer transition-all", isPlaying ? "bg-primary text-black" : "bg-muted text-muted-foreground")}
+          >
+            {isPlaying ? <Square className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
+          </Button>
+        </div>
 
-            <div className="flex flex-col gap-2">
-               <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Sequencer_Length</span>
-               <div className="flex items-center gap-4 bg-black px-4 py-2 rounded-xl border border-white/5">
-                  <Slider 
-                    value={[numSteps]} 
-                    min={4} 
-                    max={64} 
-                    step={4}
-                    onValueChange={(v) => setNumSteps(v[0])} 
-                    className="w-24 h-1"
-                  />
-                  <input 
-                    type="number" 
-                    value={numSteps} 
-                    onChange={(e) => setNumSteps(parseInt(e.target.value) || 16)}
-                    className="bg-transparent text-xl font-black text-primary outline-none w-12 text-center"
-                  />
-               </div>
-            </div>
-         </div>
+        <div className="flex items-center gap-4 bg-black/40 px-6 py-1 rounded-sm border border-white/5">
+           <div className="flex flex-col items-center">
+              <span className="text-[8px] text-primary/60 font-black uppercase leading-none">BPM</span>
+              <span className="text-xl font-black text-primary leading-none tracking-tighter">{bpm.toFixed(3)}</span>
+           </div>
+           <div className="w-px h-8 bg-white/10" />
+           <div className="flex flex-col items-center">
+              <span className="text-[8px] text-primary/60 font-black uppercase leading-none">TIME</span>
+              <span className="text-xl font-black text-primary leading-none tracking-tighter">1:03:07</span>
+           </div>
+           <div className="w-40 h-8">
+              <MasterVisualizer analyser={masterAnalyserRef.current} />
+           </div>
+        </div>
 
-         <div className="flex-1 max-w-md h-20 bg-black rounded-2xl border border-white/5 p-4 flex items-center">
-            <MasterVisualizer analyser={masterAnalyserRef.current} />
-         </div>
-
-         <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" className="w-12 h-12 rounded-xl text-primary/40 hover:text-primary hover:bg-primary/5 border border-transparent hover:border-primary/20" onClick={handleSave}>
-               <Save className="w-5 h-5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="w-12 h-12 rounded-xl text-primary/40 hover:text-primary hover:bg-primary/5 border border-transparent hover:border-primary/20" onClick={() => setGrid({})}>
-               <Trash2 className="w-5 h-5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="w-12 h-12 rounded-xl text-primary/40 hover:text-primary hover:bg-primary/5 border border-transparent hover:border-primary/20">
-               <DownloadCloud className="w-5 h-5" />
-            </Button>
-         </div>
+        <div className="flex items-center gap-2">
+           <Button variant="ghost" size="sm" className="h-8 px-4 text-[10px] font-black uppercase text-primary border border-primary/20 hover:bg-primary/5" onClick={handleSave}>
+              <Save className="w-3 h-3 mr-2" /> Save
+           </Button>
+        </div>
       </div>
 
-      {/* CHANNEL RACK SECTION */}
-      <div className="bg-[#0d0d0d] border border-white/5 rounded-[3rem] p-10 shadow-2xl overflow-hidden relative">
-        <div className="absolute inset-0 studio-grid-bg opacity-[0.02]" />
-        
-        <div className="space-y-4 relative z-10">
+      {/* CHANNEL RACK WINDOW */}
+      <div className="flex-1 flex flex-col bg-[#1e2329] rounded-sm daw-button-outer overflow-hidden m-4 border border-white/10">
+        <div className="h-8 bg-[#2d333b] border-b border-black flex items-center justify-between px-3">
+          <div className="flex items-center gap-2">
+            <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            <div className="w-3 h-3 bg-primary rounded-full shadow-[0_0_5px_rgba(255,153,0,0.5)]" />
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Channel Rack</span>
+          </div>
+          <div className="flex items-center gap-2">
+             <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-white"><BarChart3 className="w-3 h-3" /></Button>
+             <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-white"><MoreHorizontal className="w-3 h-3" /></Button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-0.5">
           {Array.from({ length: numChannels }).map((_, chIdx) => {
             const chKey = chIdx.toString();
-            const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
-            const selId = selectedClipsForChannel[chKey] || '';
-            const activeClip = clips.find(c => c.id === selId);
-
+            const s = channelSettings[chKey];
+            const activeClip = clips.find(c => c.id === selectedClips[chKey]);
+            
             return (
-              <div key={chIdx} className="flex items-center gap-4 animate-in fade-in slide-in-from-left-4" style={{ animationDelay: `${chIdx * 0.05}s` }}>
-                {/* MIXER & SOURCE CONTROLS */}
-                <div className="w-[480px] bg-black/40 p-4 rounded-2xl border border-white/5 flex items-center gap-5 gold-border">
-                   <div className="flex flex-col items-center gap-1.5 shrink-0">
-                      <Button 
-                        variant="ghost" size="icon" 
-                        className={cn("w-7 h-7 rounded-full shadow-inner", s.muted ? "bg-red-500/80" : "bg-neutral-800 border border-white/5")}
-                        onClick={() => updateChannelSetting(chKey, 'muted', !s.muted)}
-                      >
-                         <VolumeX className={cn("w-3.5 h-3.5 text-white", !s.muted && "opacity-20")} />
-                      </Button>
-                   </div>
-
-                   <div className="flex flex-col gap-1.5 flex-1 min-w-0">
-                      <select
-                        className="bg-transparent text-[10px] font-black uppercase text-primary outline-none truncate cursor-pointer hover:text-white transition-colors"
-                        value={selId}
-                        onChange={(e) => setSelectedClipsForChannel(p => ({ ...p, [chKey]: e.target.value }))}
-                      >
-                        <option value="" className="bg-black">NO_SIGNAL_CONNECTED</option>
-                        {clips.map(c => <option key={c.id} value={c.id} className="bg-black">{c.name}</option>)}
-                      </select>
-                      <div className="flex items-center gap-4">
-                         <div className="flex flex-col items-center flex-1">
-                            <Slider value={[(s.volume ?? 0.8) * 100]} onValueChange={(v) => updateChannelSetting(chKey, 'volume', v[0] / 100)} className="h-1" />
-                            <span className="text-[7px] font-black text-muted-foreground uppercase mt-1 tracking-tighter">GAIN</span>
-                         </div>
-                         <div className="flex flex-col items-center flex-1">
-                            <Slider value={[(s.pan ?? 0) * 50 + 50]} onValueChange={(v) => updateChannelSetting(chKey, 'pan', (v[0] - 50) / 50)} className="h-1" />
-                            <span className="text-[7px] font-black text-muted-foreground uppercase mt-1 tracking-tighter">PAN</span>
-                         </div>
-                      </div>
-                   </div>
-
-                   <ChannelSettingsDialog 
-                     channelIdx={chIdx} 
-                     settings={s} 
-                     onUpdate={(key, val) => updateChannelSetting(chKey, key, val)}
-                     onBatchUpdate={(settings) => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], ...settings } }))}
-                     onAudition={() => { if (selId) playClip(selId, chKey); }}
-                   />
+              <div key={chIdx} className={cn("flex items-center gap-2 h-9 p-1 group hover:bg-white/5", selectedChannelForGraph === chIdx && "bg-primary/5")}>
+                {/* MUTE / PAN / VOL */}
+                <button 
+                  onClick={() => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], muted: !s.muted }}))}
+                  className={cn("w-3 h-3 rounded-full border border-black daw-button-inner", s.muted ? "bg-red-900/40" : "bg-primary shadow-[0_0_6px_rgba(255,153,0,0.6)]")} 
+                />
+                
+                <div className="flex items-center gap-1 shrink-0">
+                  <div className="w-6 h-6 rounded-full bg-[#111] daw-button-inner flex items-center justify-center relative cursor-ns-resize group/knob">
+                    <div className="absolute top-0 bottom-0 left-[50%] w-0.5 bg-primary/40 origin-center transition-transform" style={{ transform: `rotate(${s.pan * 150}deg)` }} />
+                    <span className="absolute -top-6 left-0 opacity-0 group-hover/knob:opacity-100 transition-opacity text-[8px] bg-black px-1 rounded">PAN</span>
+                  </div>
+                  <div className="w-6 h-6 rounded-full bg-[#111] daw-button-inner flex items-center justify-center relative cursor-ns-resize group/knob">
+                    <div className="absolute top-0 bottom-0 left-[50%] w-0.5 bg-primary origin-center transition-transform" style={{ transform: `rotate(${(s.volume - 0.5) * 300}deg)` }} />
+                    <span className="absolute -top-6 left-0 opacity-0 group-hover/knob:opacity-100 transition-opacity text-[8px] bg-black px-1 rounded">VOL</span>
+                  </div>
                 </div>
 
-                {/* PATTERN SEQUENCER */}
-                <div className="flex-1 flex items-center gap-1.5 overflow-x-auto pb-2 custom-scrollbar">
+                {/* CHANNEL NAME */}
+                <button 
+                  onClick={() => setSelectedChannelForGraph(chIdx)}
+                  className={cn(
+                    "w-32 h-7 rounded-sm text-[10px] font-bold uppercase tracking-tight truncate px-2 text-left daw-button-outer transition-colors",
+                    selectedChannelForGraph === chIdx ? "bg-muted text-primary" : "bg-[#2d333b] text-muted-foreground hover:text-white"
+                  )}
+                >
+                  {activeClip?.name || `CHANNEL_${chIdx + 1}`}
+                </button>
+
+                {/* STEP GRID */}
+                <div className="flex-1 flex gap-1 h-full items-center">
                   {Array.from({ length: numSteps }).map((_, stepIdx) => {
-                    const clipIds = grid[`${chIdx}-${stepIdx}`] || [];
-                    const isGroupStart = stepIdx % 4 === 0;
-                    const isActive = clipIds.includes(selId);
+                    const groupIdx = Math.floor(stepIdx / 4);
+                    const isGroupLight = groupIdx % 2 === 0;
+                    const notes = grid[`${chIdx}-${stepIdx}`] || [];
+                    const isActive = notes.length > 0;
                     const isCurrent = stepIdx === currentStep;
 
                     return (
                       <button
                         key={stepIdx}
-                        onClick={() => {
-                          if (!selId) {
-                            toast({ title: "Signal Missing", description: "Select a sample for this channel first." });
-                            return;
-                          }
-                          const key = `${chIdx}-${stepIdx}`;
-                          const ng = { ...grid };
-                          if (isActive) {
-                            ng[key] = ng[key].filter(id => id !== selId);
-                            if (ng[key].length === 0) delete ng[key];
-                          } else {
-                            ng[key] = [selId];
-                            playClip(selId, chKey);
-                          }
-                          setGrid(ng);
-                        }}
+                        onClick={() => toggleStep(chIdx, stepIdx)}
                         className={cn(
-                          "w-10 h-11 rounded-lg transition-all border shadow-lg transform active:scale-90",
-                          isActive 
-                            ? (isGroupStart ? "bg-primary border-primary gold-shadow" : "bg-primary/80 border-primary/40")
-                            : (isGroupStart ? "bg-[#222] border-white/10" : "bg-[#181818] border-white/5"),
-                          isCurrent && "ring-2 ring-white scale-110 z-10 brightness-125",
-                          !isActive && "hover:bg-white/10 hover:border-white/20"
+                          "flex-1 h-6 rounded-[1px] transition-all transform active:scale-95 daw-button-outer",
+                          isActive ? "step-active" : (isGroupLight ? "step-inactive-light" : "step-inactive-dark"),
+                          isCurrent && "ring-1 ring-white brightness-125 scale-105 z-10"
                         )}
-                      >
-                         {isActive && <div className="w-1.5 h-1.5 bg-black rounded-full mx-auto" />}
-                      </button>
+                      />
                     );
                   })}
                 </div>
+
+                <ChannelSettingsDialog 
+                  channelIdx={chIdx} 
+                  settings={s} 
+                  onUpdate={(k, v) => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], [k]: v }}))}
+                  onBatchUpdate={(ns) => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], ...ns }}))}
+                  onAudition={() => activeClip && playNote({ id: 'audition', clipId: activeClip.id, velocity: 1, finePitch: 0 }, chKey, (audioContextRef.current?.currentTime || 0))}
+                />
               </div>
             );
           })}
+
+          <Button 
+            variant="ghost" 
+            className="w-full h-8 text-[9px] font-black uppercase text-muted-foreground hover:text-white hover:bg-white/5 mt-4 border border-dashed border-white/5"
+            onClick={() => setNumChannels(p => Math.min(16, p + 1))}
+          >
+            <Plus className="w-3 h-3 mr-2" /> Add Channel
+          </Button>
         </div>
 
-        <Button
-          variant="outline"
-          className="w-full h-16 mt-10 rounded-2xl border-dashed border-2 border-white/5 bg-black/40 text-[11px] font-black uppercase tracking-[0.4em] text-muted-foreground hover:text-white hover:bg-white/10 transition-all"
-          onClick={() => setNumChannels(p => p + 1)}
-        >
-          <Plus className="w-4 h-4 mr-3 text-primary" /> Create_New_Signal_Slot
-        </Button>
+        {/* GRAPH EDITOR PANEL */}
+        <div className="h-48 bg-[#1a1f25] border-t border-black p-2 flex flex-col gap-2">
+           <div className="flex items-center justify-between px-2">
+              <div className="flex gap-4">
+                 <button className="text-[9px] font-black text-primary uppercase tracking-widest border-b border-primary">Velocity</button>
+                 <button className="text-[9px] font-black text-muted-foreground uppercase tracking-widest hover:text-white">Fine Pitch</button>
+                 <button className="text-[9px] font-black text-muted-foreground uppercase tracking-widest hover:text-white">Panning</button>
+              </div>
+              <span className="text-[8px] font-bold text-muted-foreground uppercase">Editing: Channel {selectedChannelForGraph + 1}</span>
+           </div>
+           
+           <div className="flex-1 flex gap-1 items-end pt-4 px-2">
+              {Array.from({ length: numSteps }).map((_, stepIdx) => {
+                const notes = grid[`${selectedChannelForGraph}-${stepIdx}`] || [];
+                const velocity = notes[0]?.velocity || 0;
+                
+                return (
+                  <div key={stepIdx} className="flex-1 h-full flex flex-col justify-end group/bar">
+                     <div 
+                        className={cn("w-full rounded-t-sm transition-all daw-button-outer", velocity > 0 ? "bg-primary/60 group-hover/bar:bg-primary" : "bg-white/5")}
+                        style={{ height: `${velocity * 100}%` }}
+                        onClick={(e) => {
+                          const rect = e.currentTarget.parentElement?.getBoundingClientRect();
+                          if (!rect) return;
+                          const val = Math.max(0.1, Math.min(1.0, 1 - (e.clientY - rect.top) / rect.height));
+                          const key = `${selectedChannelForGraph}-${stepIdx}`;
+                          if (grid[key]) {
+                            const ng = { ...grid };
+                            ng[key] = ng[key].map(n => ({ ...n, velocity: val }));
+                            setGrid(ng);
+                          }
+                        }}
+                     />
+                  </div>
+                );
+              })}
+           </div>
+        </div>
       </div>
 
-      {/* STATUS METRICS */}
-      <footer className="flex items-center justify-between px-12 py-6 bg-black/40 rounded-[2rem] border border-white/5 text-[9px] font-black uppercase tracking-[0.4em] text-muted-foreground shadow-inner">
-         <div className="flex items-center gap-10">
-            <span className="flex items-center gap-3"><Activity className="w-3.5 h-3.5 text-primary" /> Audio_Engine: 44.1khz_32bit</span>
-            <span className="flex items-center gap-3"><Maximize2 className="w-3.5 h-3.5 text-primary" /> Dynamic_Range: +12db_Safe</span>
-         </div>
-         <div className="flex items-center gap-10">
-            <span className="opacity-40">Build: DAW_v2.0.4_STABLE</span>
-            <span className="text-primary italic">Precision_Lookahead_Ready</span>
-         </div>
-      </footer>
+      {/* FOOTER METRICS */}
+      <div className="bg-black border-t border-white/5 h-6 flex items-center justify-between px-4 text-[8px] font-bold text-muted-foreground uppercase tracking-[0.3em]">
+        <div className="flex gap-6">
+           <span className="flex items-center gap-1"><Activity className="w-2.5 h-2.5 text-primary" /> ASSET_LOADED: {clips.length}</span>
+           <span>ENGINE_STABLE: 44.1KHZ</span>
+        </div>
+        <div className="flex gap-4">
+           <span>v25.1.5 [BUILD 4976]</span>
+           <span className="text-primary italic">DROP_IT_READY</span>
+        </div>
+      </div>
     </div>
   );
 }

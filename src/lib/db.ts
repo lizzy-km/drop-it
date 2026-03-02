@@ -16,6 +16,13 @@ export interface AudioClip {
   createdAt: number;
 }
 
+export interface NoteProperty {
+  id: string;
+  clipId: string;
+  velocity: number;   // 0 to 1
+  finePitch: number;  // -100 to 100 cents
+}
+
 export interface ChannelSettings {
   volume: number;
   pitch: number;
@@ -29,26 +36,21 @@ export interface ChannelSettings {
   muted: boolean;
   reversed: boolean;
   
-  // Bypass Flags
   oscActive: boolean;
   svfActive: boolean;
   lfoActive: boolean;
   fxActive: boolean;
   ampActive: boolean;
 
-  // Synthesis Parameters
   unison: number;
   vibrato: number;
-
-  // OSC Lab
-  oscCoarse: number; // semitones -24 to 24
-  oscFine: number;   // cents -100 to 100
+  oscCoarse: number;
+  oscFine: number;
   oscLevel: number;
-  oscLfo: number;    // pitch lfo depth
-  oscEnv: number;    // pitch env depth
-  oscPw: number;     // phase/width
+  oscLfo: number;
+  oscEnv: number;
+  oscPw: number;
 
-  // AMP Envelope (Amplifier)
   ampAttack: number;
   ampHold: number;
   ampDecay: number;
@@ -56,7 +58,6 @@ export interface ChannelSettings {
   ampRelease: number;
   ampLevel: number;
 
-  // SVF (State Variable Filter)
   svfCut: number;
   svfEmph: number;
   svfEnv: number;
@@ -68,15 +69,12 @@ export interface ChannelSettings {
   svfSustain: number;
   svfRelease: number;
 
-  // LFO Lab
   lfoRate: number;
   lfoDelay: number;
 
-  // Limiter
   limiterPre: number;
   limiterMix: number;
 
-  // Legacy/Internal Mapping
   attack: number;
   release: number;
   trimStart: number;
@@ -90,7 +88,7 @@ export interface Track {
   bpm: number;
   numChannels: number;
   numSteps: number;
-  grid: Record<string, string[]>; 
+  grid: Record<string, NoteProperty[]>; 
   channelSettings: Record<string, ChannelSettings>;
   selectedClips: Record<string, string>; 
   createdAt: number;
@@ -144,27 +142,16 @@ export const db = {
     if (typeof window === 'undefined') return [];
     const data = localStorage.getItem(STORAGE_KEYS.CLIPS);
     let clips: AudioClip[] = data ? JSON.parse(data) : [];
-    
-    const uniqueMap = new Map();
-    clips.forEach(clip => uniqueMap.set(clip.id, clip));
-    const dedupedClips = Array.from(uniqueMap.values());
-    
-    if (userId) return dedupedClips.filter(c => c.userId === userId);
-    return dedupedClips;
+    if (userId) return clips.filter(c => c.userId === userId);
+    return clips;
   },
 
   saveClip: (clip: AudioClip) => {
     const clips = db.getClips();
     const existingIdx = clips.findIndex(c => c.id === clip.id);
-    if (existingIdx > -1) {
-      clips[existingIdx] = clip;
-    } else {
-      clips.push(clip);
-    }
-    
-    const uniqueMap = new Map();
-    clips.forEach(c => uniqueMap.set(c.id, c));
-    localStorage.setItem(STORAGE_KEYS.CLIPS, JSON.stringify(Array.from(uniqueMap.values())));
+    if (existingIdx > -1) clips[existingIdx] = clip;
+    else clips.push(clip);
+    localStorage.setItem(STORAGE_KEYS.CLIPS, JSON.stringify(clips));
   },
 
   deleteClip: (clipId: string) => {
@@ -176,13 +163,8 @@ export const db = {
     if (typeof window === 'undefined') return [];
     const data = localStorage.getItem(STORAGE_KEYS.TRACKS);
     let tracks: Track[] = data ? JSON.parse(data) : [];
-    
-    const uniqueMap = new Map();
-    tracks.forEach(t => uniqueMap.set(t.id, t));
-    const dedupedTracks = Array.from(uniqueMap.values());
-    
-    if (userId) return dedupedTracks.filter(t => t.userId === userId);
-    return dedupedTracks;
+    if (userId) return tracks.filter(t => t.userId === userId);
+    return tracks;
   },
 
   getTrack: (trackId: string): Track | null => {
@@ -195,10 +177,7 @@ export const db = {
     const existing = tracks.findIndex(t => t.id === track.id);
     if (existing > -1) tracks[existing] = track;
     else tracks.push(track);
-    
-    const uniqueMap = new Map();
-    tracks.forEach(t => uniqueMap.set(t.id, t));
-    localStorage.setItem(STORAGE_KEYS.TRACKS, JSON.stringify(Array.from(uniqueMap.values())));
+    localStorage.setItem(STORAGE_KEYS.TRACKS, JSON.stringify(tracks));
   },
 
   deleteTrack: (trackId: string) => {
@@ -217,11 +196,6 @@ export const db = {
     const existing = presets.findIndex(p => p.id === preset.id);
     if (existing > -1) presets[existing] = preset;
     else presets.push(preset);
-    localStorage.setItem(STORAGE_KEYS.PRESETS, JSON.stringify(presets));
-  },
-
-  deletePreset: (id: string) => {
-    const presets = db.getPresets().filter(p => p.id !== id);
     localStorage.setItem(STORAGE_KEYS.PRESETS, JSON.stringify(presets));
   },
 
