@@ -8,7 +8,8 @@ import {
   Settings, Volume2, Activity, Maximize2,
   ChevronDown, MoreHorizontal, Power, 
   BarChart3, Music2, Wand2, Download, Upload,
-  ListMusic, SlidersHorizontal, MousePointer2
+  ListMusic, SlidersHorizontal, MousePointer2,
+  FileDown, FileUp, ChevronRight
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings, NoteProperty } from '@/lib/db';
 import { cn } from '@/lib/utils';
@@ -23,6 +24,12 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const DEFAULT_CHANNELS = 8;
 const MAX_STEPS = 64;
@@ -79,6 +86,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const schedulerTimerRef = useRef<NodeJS.Timeout | null>(null);
   const nextNoteTimeRef = useRef<number>(0);
   const currentStepRef = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initAudio = useCallback(() => {
     if (!audioContextRef.current) {
@@ -119,12 +127,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     const panNode = ctx.createStereoPanner();
     const filterNode = ctx.createBiquadFilter();
 
-    // Strict sanitization for all float values
     const safeVolume = isFinite(s.volume) ? s.volume : 0.8;
     const safePan = isFinite(s.pan) ? Math.max(-1, Math.min(1, s.pan)) : 0;
     const safePitch = isFinite(s.pitch) ? Math.max(0.1, s.pitch) : 1.0;
     
-    // Per-note offsets
     const safeVelocity = isFinite(note.velocity) ? note.velocity : 1.0;
     const safeFinePitch = isFinite(note.finePitch) ? note.finePitch : 0;
     const notePanOffset = isFinite(note.panOffset) ? note.panOffset : 0;
@@ -235,7 +241,51 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     };
     db.saveTrack(t);
     onSaveTrack(t);
-    toast({ title: "Pattern Saved" });
+    toast({ title: "Session Saved to Studio" });
+  };
+
+  const handleExportProject = () => {
+    const projectData = {
+      type: "DROPIT_PROJECT",
+      version: "1.1",
+      timestamp: Date.now(),
+      data: { title, bpm, numChannels, numSteps, grid, channelSettings, selectedClips }
+    };
+    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title.toLowerCase().replace(/\s+/g, '_')}_project.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: "Project Exported", description: "Config JSON saved to your device." });
+  };
+
+  const handleImportProject = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        if (json.type !== "DROPIT_PROJECT") throw new Error("Invalid project format");
+        const { data } = json;
+        setTitle(data.title || 'IMPORTED_PROJECT');
+        setBpm(data.bpm || 130);
+        setNumSteps(data.numSteps || 16);
+        setNumChannels(data.numChannels || DEFAULT_CHANNELS);
+        setGrid(data.grid || {});
+        setChannelSettings(data.channelSettings || {});
+        setSelectedClips(data.selectedClips || {});
+        toast({ title: "Project Imported Successfully" });
+      } catch (err) {
+        toast({ title: "Import Failed", variant: "destructive", description: "Incompatible JSON schema." });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleRandomize = () => {
@@ -277,17 +327,16 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     }
   };
 
-  // Helper for Graph Editor normalization
   const getGraphValue = (stepIdx: number): number => {
     const notes = grid[`${selectedChannelForGraph}-${stepIdx}`] || [];
     if (notes.length === 0) return 0;
     const n = notes[0];
     switch (activeGraphProperty) {
       case 'velocity': return n.velocity;
-      case 'finePitch': return (n.finePitch + 1200) / 2400; // Map -1200..1200 to 0..1
-      case 'panOffset': return (n.panOffset + 1) / 2;      // Map -1..1 to 0..1
-      case 'cutoffOffset': return (n.cutoffOffset + 1) / 2; // Map -1..1 to 0..1
-      case 'resOffset': return (n.resOffset + 1) / 2;       // Map -1..1 to 0..1
+      case 'finePitch': return (n.finePitch + 1200) / 2400;
+      case 'panOffset': return (n.panOffset + 1) / 2;
+      case 'cutoffOffset': return (n.cutoffOffset + 1) / 2;
+      case 'resOffset': return (n.resOffset + 1) / 2;
       default: return 0;
     }
   };
@@ -314,12 +363,31 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   return (
     <div className="flex flex-col gap-1 h-full select-none">
+      <input type="file" ref={fileInputRef} onChange={handleImportProject} accept=".json" className="hidden" />
+      
       {/* DAW TOOLBAR */}
       <div className="flex items-center justify-between bg-[#111] border-b border-white/5 p-1 h-12 shadow-md z-50">
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:bg-white/5">File</Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:bg-white/5">File</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="glass-panel border-primary/20 bg-black/90 p-1 min-w-[180px]">
+              <DropdownMenuItem onClick={handleSave} className="text-[10px] font-black uppercase text-primary hover:bg-primary/10 cursor-pointer">
+                <Save className="w-3 h-3 mr-2" /> Save_to_Library
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportProject} className="text-[10px] font-black uppercase text-primary hover:bg-primary/10 cursor-pointer">
+                <FileDown className="w-3 h-3 mr-2" /> Export_Project_JSON
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => fileInputRef.current?.click()} className="text-[10px] font-black uppercase text-primary hover:bg-primary/10 cursor-pointer">
+                <FileUp className="w-3 h-3 mr-2" /> Import_Project_JSON
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          
           <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:bg-white/5">Edit</Button>
           <div className="w-px h-4 bg-white/10 mx-2" />
+          
           <Button 
             onClick={() => setIsPlaying(!isPlaying)}
             className={cn("h-8 w-8 rounded-sm daw-button-outer transition-all", isPlaying ? "bg-primary text-black" : "bg-muted text-muted-foreground")}
@@ -363,15 +431,16 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
            </div>
         </div>
 
-        <div className="flex items-center gap-2">
-           <Button variant="ghost" size="sm" className="h-8 px-4 text-[10px] font-black uppercase text-primary border border-primary/20 hover:bg-primary/5" onClick={handleSave}>
-              <Save className="w-3 h-3 mr-2" /> Commit Pattern
-           </Button>
+        <div className="flex items-center gap-2 px-4">
+           <div className="flex flex-col items-end">
+              <span className="text-[9px] font-black text-primary italic uppercase tracking-tighter">{title}</span>
+              <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-widest">MASTER_SIGNAL_ACTIVE</span>
+           </div>
         </div>
       </div>
 
       {/* CHANNEL RACK WINDOW */}
-      <div className="flex-1 flex flex-col bg-[#1e2329] rounded-sm daw-button-outer overflow-hidden m-4 border border-white/10">
+      <div className="flex-1 flex flex-col bg-[#1e2329] rounded-sm daw-button-outer overflow-hidden m-4 border border-white/10 shadow-2xl">
         <div className="h-8 bg-[#2d333b] border-b border-black flex items-center justify-between px-3">
           <div className="flex items-center gap-2">
             <ChevronDown className="w-3 h-3 text-muted-foreground" />
@@ -394,12 +463,11 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               <div 
                 key={chIdx} 
                 className={cn(
-                  "flex items-center gap-2 h-9 p-1 group hover:bg-white/5 cursor-pointer", 
+                  "flex items-center gap-2 h-9 p-1 group hover:bg-white/5 cursor-pointer rounded-sm transition-colors", 
                   selectedChannelForGraph === chIdx ? "bg-primary/5" : ""
                 )}
                 onClick={() => setSelectedChannelForGraph(chIdx)}
               >
-                {/* MUTE / PAN / VOL */}
                 <button 
                   onClick={(e) => { e.stopPropagation(); setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], muted: !s.muted }})); }}
                   className={cn("w-3 h-3 rounded-full border border-black daw-button-inner transition-colors shrink-0", s.muted ? "bg-red-900/40" : "bg-primary shadow-[0_0_6px_rgba(255,153,0,0.6)]")} 
@@ -436,13 +504,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                   </div>
                 </div>
 
-                {/* CHANNEL NAME / CLIP SELECTOR */}
                 <div className="w-32 flex items-center bg-[#2d333b] rounded-sm daw-button-outer overflow-hidden">
                    <Select value={activeClipId} onValueChange={(val) => changeClip(chKey, val)}>
                       <SelectTrigger className="h-7 border-none bg-transparent focus:ring-0 text-[9px] font-bold uppercase p-1">
                         <SelectValue placeholder="Empty" />
                       </SelectTrigger>
-                      <SelectContent className="glass-panel border-primary/20">
+                      <SelectContent className="glass-panel border-primary/20 bg-black/90">
                         {clips.map(c => (
                           <SelectItem key={c.id} value={c.id} className="text-[10px] font-bold uppercase">{c.name}</SelectItem>
                         ))}
@@ -450,7 +517,6 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                    </Select>
                 </div>
 
-                {/* STEP GRID */}
                 <div className="flex-1 flex gap-1 h-full items-center">
                   {Array.from({ length: numSteps }).map((_, stepIdx) => {
                     const groupIdx = Math.floor(stepIdx / 4);
@@ -466,7 +532,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                         className={cn(
                           "flex-1 h-6 rounded-[1px] transition-all transform active:scale-95 daw-button-outer",
                           isActive ? "step-active" : (isGroupLight ? "step-inactive-light" : "step-inactive-dark"),
-                          isCurrent && "ring-1 ring-white brightness-125 scale-105 z-10"
+                          isCurrent && "ring-1 ring-white brightness-125 scale-105 z-10 shadow-[0_0_10px_white]"
                         )}
                       />
                     );
@@ -504,7 +570,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         </div>
 
         {/* GRAPH EDITOR PANEL */}
-        <div className="h-48 bg-[#1a1f25] border-t border-black p-3 flex flex-col gap-3">
+        <div className="h-48 bg-[#1a1f25] border-t border-black p-3 flex flex-col gap-3 shadow-inner">
            <div className="flex items-center justify-between px-2">
               <div className="flex gap-2 bg-black/40 p-1 rounded-xl border border-white/5">
                  {[
@@ -527,8 +593,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                    </button>
                  ))}
               </div>
-              <div className="text-[8px] font-black text-primary/60 uppercase tracking-widest">
-                CHANNEL {selectedChannelForGraph + 1} MODIFIERS
+              <div className="text-[8px] font-black text-primary/60 uppercase tracking-widest flex items-center gap-2">
+                <ChevronRight className="w-3 h-3" /> CHANNEL {selectedChannelForGraph + 1} MODIFIERS
               </div>
            </div>
            
