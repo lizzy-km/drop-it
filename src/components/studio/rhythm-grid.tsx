@@ -488,14 +488,14 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   return (
     <div 
-      className="flex flex-col gap-1 h-full select-none overflow-hidden"
+      className="flex flex-col gap-1 h-full w-full max-w-full select-none overflow-hidden"
       onMouseUp={() => { setIsMouseDown(false); setLastToggledStep(null); }}
       onMouseLeave={() => { setIsMouseDown(false); setLastToggledStep(null); }}
     >
       <input type="file" ref={fileInputRef} onChange={handleImportProject} accept=".json" className="hidden" />
       
       {/* DAW TOOLBAR */}
-      <div className="flex items-center justify-between bg-[#111] border-b border-white/5 p-1 h-12 shadow-md z-50 shrink-0">
+      <div className="flex w-full max-w-full overflow-hidden items-center justify-start bg-[#111] border-b border-white/5 p-1 h-12 shadow-md z-50 shrink-0">
         <div className="flex items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -514,7 +514,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
             </DropdownMenuContent>
           </DropdownMenu>
           
-          <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:bg-white/5">Edit</Button>
+          {/* <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:bg-white/5">Edit</Button> */}
           <div className="w-px h-4 bg-white/10 mx-2" />
           
           <Button 
@@ -528,7 +528,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
           </Button>
         </div>
 
-        <div className="flex items-center gap-8 bg-black/40 px-6 py-1 rounded-sm border border-white/5">
+        <div className="flex items-start gap-8 bg-black/40 px-6 py-1 rounded-sm border border-white/5">
            <div className="flex flex-col items-center min-w-[120px] gap-1">
               <span className="text-[8px] text-primary/60 font-black uppercase leading-none">BPM: {bpm.toFixed(1)}</span>
               <div className="flex items-center gap-2 w-full">
@@ -585,14 +585,13 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         <div 
           ref={stepContainerRef}
           onScroll={handleSequencerScroll}
-          className="flex-1 overflow-auto custom-scrollbar relative"
+          className="flex w-full max-w-full overflow-x-hidden overflow-y-auto custom-scrollbar relative"
         >
-          <div className="min-w-max flex flex-col">
+          <div className="w-[270px]    max-w-[270px] overflow-hidden flex flex-col">
             {Array.from({ length: numChannels }).map((_, chIdx) => {
               const chKey = chIdx.toString();
               const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
               const activeClipId = selectedClips[chKey];
-              const activeClip = clips.find(c => c.id === activeClipId);
               
               return (
                 <div 
@@ -688,7 +687,37 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                     </div>
                   </div>
 
-                  {/* SCROLLABLE STEP AREA */}
+                  
+                </div>
+              );
+            })}
+
+            <Button 
+              variant="ghost" 
+              className="sticky my-2 left-0 h-8 text-[9px] font-black uppercase text-muted-foreground hover:text-white hover:bg-white/5 mt-4 border border-dashed border-white/5 w-full z-20 shrink-0"
+              onClick={() => setNumChannels(p => Math.min(16, p + 1))}
+            >
+              <Plus className="w-3 h-3 mr-2" /> Add Mixer Channel
+            </Button>
+          </div>
+
+          <div className=' flex flex-col  w-[85%] items-start justify-start h-full custom-scrollbar  max-w-[85%] overflow-auto ' >
+            {
+              Array.from({length:numChannels}).map((_,chIdx)=>{
+                const chKey = chIdx.toString();
+                const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
+                const activeClipId = selectedClips[chKey];
+                const activeClip = clips.find(c => c.id === activeClipId);
+                return (
+                  <div 
+                  onClick={() => setSelectedChannelForGraph(chIdx)}
+
+                  key={chIdx} 
+                  className={cn(
+                    "flex w-auto items-center gap-2 h-9 p-1 group hover:bg-white/5 cursor-pointer rounded-sm transition-colors border-b border-white/5 shrink-0", 
+                    selectedChannelForGraph === chIdx ? "bg-primary/5" : ""
+                  )}                   >
+                    {/* SCROLLABLE STEP AREA */}
                   <div className="flex gap-1 h-full items-center pl-2 shrink-0">
                     {Array.from({ length: numSteps }).map((_, stepIdx) => {
                       const groupIdx = Math.floor(stepIdx / 4);
@@ -729,17 +758,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                       }, chKey, (audioContextRef.current?.currentTime || 0))}
                     />
                   </div>
-                </div>
-              );
-            })}
-
-            <Button 
-              variant="ghost" 
-              className="sticky left-0 h-8 text-[9px] font-black uppercase text-muted-foreground hover:text-white hover:bg-white/5 mt-4 border border-dashed border-white/5 w-64 z-20 shrink-0"
-              onClick={() => setNumChannels(p => Math.min(16, p + 1))}
-            >
-              <Plus className="w-3 h-3 mr-2" /> Add Mixer Channel
-            </Button>
+                  </div>
+                )
+              })
+            }
           </div>
         </div>
 
@@ -775,9 +797,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
            <div 
              ref={graphContainerRef}
              onScroll={handleGraphScroll}
-             className="flex-1 overflow-x-hidden relative"
+             className="flex-1 w-full overflow-x-auto  relative"
            >
-              <div className="flex gap-1 items-end h-full min-w-max pl-[260px]"> {/* Match the sticky control section width */}
+              <div className="flex gap-1 items-start h-full min-w-full max-w-full overflow-auto  pl-[35%]"> {/* Match the sticky control section width */}
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const notes = grid[`${selectedChannelForGraph}-${stepIdx}`] || [];
                   const val = getGraphValue(stepIdx);

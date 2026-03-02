@@ -62,7 +62,7 @@ function StudioContent() {
   if (!user) return null;
 
   return (
-    <div className="flex flex-col h-screen bg-[#0a0a0a] overflow-hidden">
+    <div className="flex flex-col h-screen w-screen bg-[#0a0a0a] overflow-hidden">
       {/* DAW MAIN INTERFACE */}
       <div className="flex-1 flex overflow-hidden">
         {/* SURGICAL SIDE BROWSER */}
@@ -134,7 +134,7 @@ function StudioContent() {
             <ChevronRight className={cn("w-3 h-3 text-white transition-transform", isBrowserOpen && "rotate-180")} />
           </button>
 
-          <div className="flex-1 overflow-auto custom-scrollbar">
+          <div className="flex-1 w-auto  overflow-auto custom-scrollbar">
             <RhythmGrid user={user} clips={clips} track={loadedTrack} onSaveTrack={() => refreshClips()} />
           </div>
         </main>
