@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -7,7 +8,7 @@ import {
   Settings, Volume2, Activity, Maximize2,
   ChevronDown, MoreHorizontal, Power, 
   BarChart3, Music2, Wand2, Download, Upload,
-  ListMusic
+  ListMusic, SlidersHorizontal, MousePointer2
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings, NoteProperty } from '@/lib/db';
 import { cn } from '@/lib/utils';
@@ -25,6 +26,8 @@ import {
 
 const DEFAULT_CHANNELS = 8;
 const MAX_STEPS = 64;
+
+type GraphProperty = 'velocity' | 'finePitch' | 'panOffset' | 'cutoffOffset' | 'resOffset';
 
 const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
   volume: 0.8, pitch: 1.0, delay: 0, reverb: 0, pan: 0, cutoff: 1.0, distortion: 0, autoTune: 0,
@@ -52,6 +55,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const [grid, setGrid] = useState<Record<string, NoteProperty[]>>(track?.grid || {});
   const [title, setTitle] = useState(track?.title || 'UNNAMED_PATTERN_1');
   const [selectedChannelForGraph, setSelectedChannelForGraph] = useState(0);
+  const [activeGraphProperty, setActiveGraphProperty] = useState<GraphProperty>('velocity');
 
   const [channelSettings, setChannelSettings] = useState<Record<string, ChannelSettings>>(() => {
     const base: Record<string, ChannelSettings> = {};
@@ -119,23 +123,34 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     const safeVolume = isFinite(s.volume) ? s.volume : 0.8;
     const safePan = isFinite(s.pan) ? Math.max(-1, Math.min(1, s.pan)) : 0;
     const safePitch = isFinite(s.pitch) ? Math.max(0.1, s.pitch) : 1.0;
+    
+    // Per-note offsets
     const safeVelocity = isFinite(note.velocity) ? note.velocity : 1.0;
     const safeFinePitch = isFinite(note.finePitch) ? note.finePitch : 0;
+    const notePanOffset = isFinite(note.panOffset) ? note.panOffset : 0;
+    const noteCutoffOffset = isFinite(note.cutoffOffset) ? note.cutoffOffset : 0;
+    const noteResOffset = isFinite(note.resOffset) ? note.resOffset : 0;
 
     const finalPitch = safePitch * Math.pow(2, safeFinePitch / 1200);
     const finalVol = safeVelocity * safeVolume;
+    const finalPan = Math.max(-1, Math.min(1, safePan + notePanOffset));
 
     source.buffer = buffer;
     source.playbackRate.setValueAtTime(isFinite(finalPitch) ? finalPitch : 1.0, time);
-    panNode.pan.setValueAtTime(isFinite(safePan) ? safePan : 0, time);
+    panNode.pan.setValueAtTime(finalPan, time);
     gainNode.gain.setValueAtTime(isFinite(finalVol) ? finalVol : 0.8, time);
 
     if (s.svfActive) {
       filterNode.type = s.svfType || 'lowpass';
-      const safeCut = isFinite(s.svfCut) ? s.svfCut : 1.0;
-      const freq = Math.max(20, Math.min(20000, 20 + (Math.pow(safeCut, 2) * 19980)));
+      const baseCut = isFinite(s.svfCut) ? s.svfCut : 1.0;
+      const finalCut = Math.max(0, Math.min(1, baseCut + noteCutoffOffset));
+      const freq = Math.max(20, Math.min(20000, 20 + (Math.pow(finalCut, 2) * 19980)));
+      
+      const baseRes = isFinite(s.svfEmph) ? s.svfEmph : 0.2;
+      const finalRes = Math.max(0, Math.min(1, baseRes + noteResOffset));
+      
       filterNode.frequency.setValueAtTime(freq, time);
-      filterNode.Q.setValueAtTime(Math.max(0.0001, (s.svfEmph || 0.2) * 20), time);
+      filterNode.Q.setValueAtTime(Math.max(0.0001, finalRes * 20), time);
     } else {
       filterNode.type = 'allpass';
     }
@@ -197,7 +212,15 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       newGrid[key] = current.filter(n => n.clipId !== clipId);
       if (newGrid[key].length === 0) delete newGrid[key];
     } else {
-      newGrid[key] = [...current, { id: crypto.randomUUID(), clipId, velocity: 0.8, finePitch: 0 }];
+      newGrid[key] = [...current, { 
+        id: crypto.randomUUID(), 
+        clipId, 
+        velocity: 0.8, 
+        finePitch: 0,
+        panOffset: 0,
+        cutoffOffset: 0,
+        resOffset: 0
+      }];
       playNote(newGrid[key][newGrid[key].length - 1], chIdx.toString(), (audioContextRef.current?.currentTime || 0) + 0.05);
     }
     setGrid(newGrid);
@@ -222,7 +245,15 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       if (!clipId) continue;
       for (let s = 0; s < numSteps; s++) {
         if (Math.random() > 0.8) {
-          newGrid[`${ch}-${s}`] = [{ id: crypto.randomUUID(), clipId, velocity: 0.6 + Math.random() * 0.4, finePitch: 0 }];
+          newGrid[`${ch}-${s}`] = [{ 
+            id: crypto.randomUUID(), 
+            clipId, 
+            velocity: 0.6 + Math.random() * 0.4, 
+            finePitch: 0,
+            panOffset: 0,
+            cutoffOffset: 0,
+            resOffset: 0
+          }];
         }
       }
     }
@@ -232,11 +263,53 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   const changeClip = (chIdx: string, clipId: string) => {
     setSelectedClips(prev => ({ ...prev, [chIdx]: clipId }));
-    // Preview sound
     const clip = clips.find(c => c.id === clipId);
     if (clip) {
-      playNote({ id: 'preview', clipId, velocity: 1, finePitch: 0 }, chIdx, (audioContextRef.current?.currentTime || 0));
+      playNote({ 
+        id: 'preview', 
+        clipId, 
+        velocity: 1, 
+        finePitch: 0,
+        panOffset: 0,
+        cutoffOffset: 0,
+        resOffset: 0
+      }, chIdx, (audioContextRef.current?.currentTime || 0));
     }
+  };
+
+  // Helper for Graph Editor normalization
+  const getGraphValue = (stepIdx: number): number => {
+    const notes = grid[`${selectedChannelForGraph}-${stepIdx}`] || [];
+    if (notes.length === 0) return 0;
+    const n = notes[0];
+    switch (activeGraphProperty) {
+      case 'velocity': return n.velocity;
+      case 'finePitch': return (n.finePitch + 1200) / 2400; // Map -1200..1200 to 0..1
+      case 'panOffset': return (n.panOffset + 1) / 2;      // Map -1..1 to 0..1
+      case 'cutoffOffset': return (n.cutoffOffset + 1) / 2; // Map -1..1 to 0..1
+      case 'resOffset': return (n.resOffset + 1) / 2;       // Map -1..1 to 0..1
+      default: return 0;
+    }
+  };
+
+  const updateGraphValue = (stepIdx: number, rawVal: number) => {
+    const key = `${selectedChannelForGraph}-${stepIdx}`;
+    const currentNotes = grid[key];
+    if (!currentNotes || currentNotes.length === 0) return;
+
+    const newGrid = { ...grid };
+    newGrid[key] = currentNotes.map(n => {
+      const updated = { ...n };
+      switch (activeGraphProperty) {
+        case 'velocity': updated.velocity = rawVal; break;
+        case 'finePitch': updated.finePitch = (rawVal * 2400) - 1200; break;
+        case 'panOffset': updated.panOffset = (rawVal * 2) - 1; break;
+        case 'cutoffOffset': updated.cutoffOffset = (rawVal * 2) - 1; break;
+        case 'resOffset': updated.resOffset = (rawVal * 2) - 1; break;
+      }
+      return updated;
+    });
+    setGrid(newGrid);
   };
 
   return (
@@ -318,10 +391,17 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
             const activeClip = clips.find(c => c.id === activeClipId);
             
             return (
-              <div key={chIdx} className={cn("flex items-center gap-2 h-9 p-1 group hover:bg-white/5", selectedChannelForGraph === chIdx && "bg-primary/5")}>
+              <div 
+                key={chIdx} 
+                className={cn(
+                  "flex items-center gap-2 h-9 p-1 group hover:bg-white/5 cursor-pointer", 
+                  selectedChannelForGraph === chIdx ? "bg-primary/5" : ""
+                )}
+                onClick={() => setSelectedChannelForGraph(chIdx)}
+              >
                 {/* MUTE / PAN / VOL */}
                 <button 
-                  onClick={() => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], muted: !s.muted }}))}
+                  onClick={(e) => { e.stopPropagation(); setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], muted: !s.muted }})); }}
                   className={cn("w-3 h-3 rounded-full border border-black daw-button-inner transition-colors shrink-0", s.muted ? "bg-red-900/40" : "bg-primary shadow-[0_0_6px_rgba(255,153,0,0.6)]")} 
                 />
                 
@@ -382,7 +462,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                     return (
                       <button
                         key={stepIdx}
-                        onClick={() => toggleStep(chIdx, stepIdx)}
+                        onClick={(e) => { e.stopPropagation(); toggleStep(chIdx, stepIdx); }}
                         className={cn(
                           "flex-1 h-6 rounded-[1px] transition-all transform active:scale-95 daw-button-outer",
                           isActive ? "step-active" : (isGroupLight ? "step-inactive-light" : "step-inactive-dark"),
@@ -393,13 +473,23 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                   })}
                 </div>
 
-                <ChannelSettingsDialog 
-                  channelIdx={chIdx} 
-                  settings={s} 
-                  onUpdate={(k, v) => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], [k]: v }}))}
-                  onBatchUpdate={(ns) => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], ...ns }}))}
-                  onAudition={() => activeClip && playNote({ id: 'audition', clipId: activeClip.id, velocity: 1, finePitch: 0 }, chKey, (audioContextRef.current?.currentTime || 0))}
-                />
+                <div onClick={(e) => e.stopPropagation()}>
+                  <ChannelSettingsDialog 
+                    channelIdx={chIdx} 
+                    settings={s} 
+                    onUpdate={(k, v) => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], [k]: v }}))}
+                    onBatchUpdate={(ns) => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], ...ns }}))}
+                    onAudition={() => activeClip && playNote({ 
+                      id: 'audition', 
+                      clipId: activeClip.id, 
+                      velocity: 1, 
+                      finePitch: 0,
+                      panOffset: 0,
+                      cutoffOffset: 0,
+                      resOffset: 0
+                    }, chKey, (audioContextRef.current?.currentTime || 0))}
+                  />
+                </div>
               </div>
             );
           })}
@@ -414,40 +504,60 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         </div>
 
         {/* GRAPH EDITOR PANEL */}
-        <div className="h-48 bg-[#1a1f25] border-t border-black p-2 flex flex-col gap-2">
+        <div className="h-48 bg-[#1a1f25] border-t border-black p-3 flex flex-col gap-3">
            <div className="flex items-center justify-between px-2">
-              <div className="flex gap-4">
-                 <button className="text-[9px] font-black text-primary uppercase tracking-widest border-b border-primary">Velocity</button>
+              <div className="flex gap-2 bg-black/40 p-1 rounded-xl border border-white/5">
+                 {[
+                   { id: 'velocity', label: 'Velocity', icon: Volume2 },
+                   { id: 'finePitch', label: 'Pitch', icon: Music2 },
+                   { id: 'panOffset', label: 'Pan', icon: MousePointer2 },
+                   { id: 'cutoffOffset', label: 'Cutoff', icon: Activity },
+                   { id: 'resOffset', label: 'Res', icon: SlidersHorizontal },
+                 ].map((prop) => (
+                   <button 
+                     key={prop.id}
+                     onClick={() => setActiveGraphProperty(prop.id as GraphProperty)}
+                     className={cn(
+                       "px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                       activeGraphProperty === prop.id ? "bg-primary text-black" : "text-muted-foreground hover:text-white hover:bg-white/5"
+                     )}
+                   >
+                     <prop.icon className="w-3 h-3" />
+                     {prop.label}
+                   </button>
+                 ))}
               </div>
-              <span className="text-[8px] font-bold text-muted-foreground uppercase">Modifying: Channel {selectedChannelForGraph + 1} ({clips.find(c => c.id === selectedClips[selectedChannelForGraph.toString()])?.name || 'None'})</span>
+              <div className="text-[8px] font-black text-primary/60 uppercase tracking-widest">
+                CHANNEL {selectedChannelForGraph + 1} MODIFIERS
+              </div>
            </div>
            
-           <div className="flex-1 flex gap-1 items-end pt-4 px-2">
+           <div className="flex-1 flex gap-1 items-end pt-2 px-2 border-l border-white/5 ml-2">
               {Array.from({ length: numSteps }).map((_, stepIdx) => {
                 const notes = grid[`${selectedChannelForGraph}-${stepIdx}`] || [];
-                const velocity = notes[0]?.velocity || 0;
+                const val = getGraphValue(stepIdx);
+                const isActive = notes.length > 0;
                 
                 return (
-                  <div key={stepIdx} className="flex-1 h-full flex flex-col justify-end group/bar">
+                  <div key={stepIdx} className="flex-1 h-full flex flex-col justify-end group/bar relative">
                      <div 
-                        className={cn("w-full rounded-t-sm transition-all daw-button-outer cursor-ns-resize", velocity > 0 ? "bg-primary/60 group-hover/bar:bg-primary" : "bg-white/5")}
-                        style={{ height: `${velocity * 100}%` }}
+                        className={cn(
+                          "w-full rounded-t-sm transition-all daw-button-outer cursor-ns-resize", 
+                          isActive ? "bg-primary/60 group-hover/bar:bg-primary shadow-[0_0_10px_rgba(255,153,0,0.2)]" : "bg-white/5"
+                        )}
+                        style={{ height: `${isActive ? (val * 100) : 0}%` }}
                         onMouseDown={(e) => {
                           const rect = e.currentTarget.parentElement?.getBoundingClientRect();
                           if (!rect) return;
                           const handleMove = (me: MouseEvent) => {
-                            const val = Math.max(0.05, Math.min(1.0, 1 - (me.clientY - rect.top) / rect.height));
-                            const key = `${selectedChannelForGraph}-${stepIdx}`;
-                            if (grid[key]) {
-                              const ng = { ...grid };
-                              ng[key] = ng[key].map(n => ({ ...n, velocity: val }));
-                              setGrid(ng);
-                            }
+                            const raw = Math.max(0, Math.min(1, 1 - (me.clientY - rect.top) / rect.height));
+                            updateGraphValue(stepIdx, raw);
                           };
                           const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
                           window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
                         }}
                      />
+                     {stepIdx % 4 === 0 && <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary/20" />}
                   </div>
                 );
               })}

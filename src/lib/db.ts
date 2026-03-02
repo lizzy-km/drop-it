@@ -19,8 +19,11 @@ export interface AudioClip {
 export interface NoteProperty {
   id: string;
   clipId: string;
-  velocity: number;   // 0 to 1
-  finePitch: number;  // -100 to 100 cents
+  velocity: number;      // 0 to 1
+  finePitch: number;     // -100 to 100 cents
+  panOffset: number;     // -1 to 1
+  cutoffOffset: number;  // -1 to 1
+  resOffset: number;     // -1 to 1
 }
 
 export interface ChannelSettings {
