@@ -94,6 +94,19 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const stepContainerRef = useRef<HTMLDivElement>(null);
   const graphContainerRef = useRef<HTMLDivElement>(null);
 
+  // Use refs to avoid interval restarts on every grid/settings change
+  const gridRef = useRef(grid);
+  const numStepsRef = useRef(numSteps);
+  const numChannelsRef = useRef(numChannels);
+  const bpmRef = useRef(bpm);
+  const channelSettingsRef = useRef(channelSettings);
+
+  useEffect(() => { gridRef.current = grid; }, [grid]);
+  useEffect(() => { numStepsRef.current = numSteps; }, [numSteps]);
+  useEffect(() => { numChannelsRef.current = numChannels; }, [numChannels]);
+  useEffect(() => { bpmRef.current = bpm; }, [bpm]);
+  useEffect(() => { channelSettingsRef.current = channelSettings; }, [channelSettings]);
+
   const initAudio = useCallback(() => {
     if (!audioContextRef.current) {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -119,7 +132,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   const playNote = useCallback(async (note: NoteProperty, chIdx: string, time: number) => {
     const ctx = initAudio();
-    const s = channelSettings[chIdx] || DEFAULT_CHANNEL_SETTINGS;
+    const s = channelSettingsRef.current[chIdx] || DEFAULT_CHANNEL_SETTINGS;
     if (s.muted) return;
 
     const clip = clips.find(c => c.id === note.clipId);
@@ -173,26 +186,32 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     panNode.connect(masterAnalyserRef.current || ctx.destination);
 
     source.start(time);
-  }, [clips, channelSettings, initAudio]);
+  }, [clips, initAudio]);
 
   const schedule = useCallback(() => {
     const ctx = initAudio();
-    const secondsPerStep = (60.0 / Math.max(20, bpm)) / 4;
+    const currentBpm = Math.max(20, bpmRef.current);
+    const secondsPerStep = (60.0 / currentBpm) / 4;
 
     while (nextNoteTimeRef.current < ctx.currentTime + 0.1) {
       const step = currentStepRef.current;
-      for (let ch = 0; ch < numChannels; ch++) {
-        const notes = grid[`${ch}-${step}`];
+      const stepLimit = numStepsRef.current;
+      const chLimit = numChannelsRef.current;
+      
+      for (let ch = 0; ch < chLimit; ch++) {
+        const notes = gridRef.current[`${ch}-${step}`];
         if (notes) {
           notes.forEach(n => playNote(n, ch.toString(), nextNoteTimeRef.current));
         }
       }
+      
       nextNoteTimeRef.current += secondsPerStep;
-      currentStepRef.current = (currentStepRef.current + 1) % numSteps;
+      currentStepRef.current = (currentStepRef.current + 1) % stepLimit;
+      
       const captureStep = step;
       setTimeout(() => setCurrentStep(captureStep), Math.max(0, (nextNoteTimeRef.current - ctx.currentTime) * 1000));
     }
-  }, [bpm, grid, numChannels, numSteps, playNote, initAudio]);
+  }, [playNote, initAudio]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -477,7 +496,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 <input 
                   type="number" 
                   value={bpm.toFixed(1)} 
-                  onChange={(e) => setBpm(parseFloat(e.target.value) || 120)}
+                  onChange={(e) => setBpm(Math.max(20, parseFloat(e.target.value) || 120))}
                   className="w-10 bg-transparent text-[9px] font-bold text-primary border-none focus:ring-0 p-0 text-right"
                 />
               </div>
@@ -490,7 +509,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 <input 
                   type="number" 
                   value={numSteps} 
-                  onChange={(e) => setNumSteps(parseInt(e.target.value) || 16)}
+                  onChange={(e) => setNumSteps(Math.min(MAX_STEPS, Math.max(8, parseInt(e.target.value) || 16)))}
                   className="w-8 bg-transparent text-[9px] font-bold text-primary border-none focus:ring-0 p-0 text-right"
                 />
               </div>
@@ -528,7 +547,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
           onScroll={handleSequencerScroll}
           className="flex-1 overflow-auto custom-scrollbar relative"
         >
-          <div className="min-w-max">
+          <div className="min-w-max flex flex-col">
             {Array.from({ length: numChannels }).map((_, chIdx) => {
               const chKey = chIdx.toString();
               const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
@@ -539,7 +558,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 <div 
                   key={chIdx} 
                   className={cn(
-                    "flex items-center gap-2 h-9 p-1 group hover:bg-white/5 cursor-pointer rounded-sm transition-colors border-b border-white/5", 
+                    "flex items-center gap-2 h-9 p-1 group hover:bg-white/5 cursor-pointer rounded-sm transition-colors border-b border-white/5 shrink-0", 
                     selectedChannelForGraph === chIdx ? "bg-primary/5" : ""
                   )}
                   onClick={() => setSelectedChannelForGraph(chIdx)}
@@ -626,7 +645,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                   </div>
 
                   {/* SCROLLABLE STEP AREA */}
-                  <div className="flex gap-1 h-full items-center pl-2">
+                  <div className="flex gap-1 h-full items-center pl-2 shrink-0">
                     {Array.from({ length: numSteps }).map((_, stepIdx) => {
                       const groupIdx = Math.floor(stepIdx / 4);
                       const isGroupLight = groupIdx % 2 === 0;
@@ -672,7 +691,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
             <Button 
               variant="ghost" 
-              className="sticky left-0 h-8 text-[9px] font-black uppercase text-muted-foreground hover:text-white hover:bg-white/5 mt-4 border border-dashed border-white/5 w-64 z-20"
+              className="sticky left-0 h-8 text-[9px] font-black uppercase text-muted-foreground hover:text-white hover:bg-white/5 mt-4 border border-dashed border-white/5 w-64 z-20 shrink-0"
               onClick={() => setNumChannels(p => Math.min(16, p + 1))}
             >
               <Plus className="w-3 h-3 mr-2" /> Add Mixer Channel
