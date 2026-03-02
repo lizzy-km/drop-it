@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -7,7 +6,7 @@ import {
   Play, Square, Save, Trash2, Plus, 
   Settings, Volume2, Activity, Maximize2,
   ChevronDown, MoreHorizontal, Power, 
-  BarChart3, Music2
+  BarChart3, Music2, Wand2
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings, NoteProperty } from '@/lib/db';
 import { cn } from '@/lib/utils';
@@ -15,7 +14,6 @@ import { toast } from '@/hooks/use-toast';
 import { Slider } from '@/components/ui/slider';
 import { MasterVisualizer } from './visualizers';
 import { ChannelSettingsDialog } from './channel-settings-dialog';
-import { GraphEditor } from './graph-editor';
 
 const DEFAULT_CHANNELS = 8;
 const MAX_STEPS = 64;
@@ -55,9 +53,13 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     return base;
   });
 
-  const [selectedClips, setSelectedClips] = useState<Record<string, string>>(
-    track?.selectedClips || Object.fromEntries(Array.from({ length: 16 }).map((_, i) => [i.toString(), '']))
-  );
+  const [selectedClips, setSelectedClips] = useState<Record<string, string>>(() => {
+    const base: Record<string, string> = {};
+    for (let i = 0; i < 16; i++) {
+      base[i.toString()] = track?.selectedClips?.[i.toString()] || (clips[i]?.id || '');
+    }
+    return base;
+  });
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const masterAnalyserRef = useRef<AnalyserNode | null>(null);
@@ -91,7 +93,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   const playNote = useCallback(async (note: NoteProperty, chIdx: string, time: number) => {
     const ctx = initAudio();
-    const s = channelSettings[chIdx];
+    const s = channelSettings[chIdx] || DEFAULT_CHANNEL_SETTINGS;
     if (s.muted) return;
 
     const clip = clips.find(c => c.id === note.clipId);
@@ -105,22 +107,24 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     const panNode = ctx.createStereoPanner();
     const filterNode = ctx.createBiquadFilter();
 
-    const basePitch = (s.pitch || 1.0) * Math.pow(2, (note.finePitch || 0) / 1200);
+    // Value sanitization to prevent non-finite errors
+    const basePitch = Math.max(0.1, (s.pitch || 1.0) * Math.pow(2, (note.finePitch || 0) / 1200));
+    const finalPan = Math.max(-1, Math.min(1, s.pan || 0));
+    const finalVol = Math.max(0, (note.velocity ?? 1.0) * (s.volume ?? 0.8));
+
     source.buffer = buffer;
     source.playbackRate.setValueAtTime(basePitch, time);
+    panNode.pan.setValueAtTime(finalPan, time);
+    gainNode.gain.setValueAtTime(finalVol, time);
 
-    panNode.pan.setValueAtTime(s.pan, time);
-    
     if (s.svfActive) {
-      filterNode.type = s.svfType;
-      filterNode.frequency.setValueAtTime(20 + (Math.pow(s.svfCut, 2) * 19980), time);
-      filterNode.Q.setValueAtTime(s.svfEmph * 20, time);
+      filterNode.type = s.svfType || 'lowpass';
+      const freq = Math.max(20, Math.min(20000, 20 + (Math.pow(s.svfCut || 1, 2) * 19980)));
+      filterNode.frequency.setValueAtTime(freq, time);
+      filterNode.Q.setValueAtTime(Math.max(0.0001, (s.svfEmph || 0.2) * 20), time);
     } else {
       filterNode.type = 'allpass';
     }
-
-    const velocityGain = (note.velocity ?? 1.0) * s.volume;
-    gainNode.gain.setValueAtTime(velocityGain, time);
 
     source.connect(filterNode);
     filterNode.connect(gainNode);
@@ -132,7 +136,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
   const schedule = useCallback(() => {
     const ctx = initAudio();
-    const secondsPerStep = (60.0 / bpm) / 4;
+    const secondsPerStep = (60.0 / Math.max(20, bpm)) / 4;
 
     while (nextNoteTimeRef.current < ctx.currentTime + 0.1) {
       const step = currentStepRef.current;
@@ -144,7 +148,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       }
       nextNoteTimeRef.current += secondsPerStep;
       currentStepRef.current = (currentStepRef.current + 1) % numSteps;
-      setTimeout(() => setCurrentStep(step), (nextNoteTimeRef.current - ctx.currentTime) * 1000);
+      setTimeout(() => setCurrentStep(step), Math.max(0, (nextNoteTimeRef.current - ctx.currentTime) * 1000));
     }
   }, [bpm, grid, numChannels, numSteps, playNote, initAudio]);
 
@@ -192,6 +196,21 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     toast({ title: "Pattern Saved" });
   };
 
+  const handleRandomize = () => {
+    const newGrid: Record<string, NoteProperty[]> = {};
+    for (let ch = 0; ch < numChannels; ch++) {
+      const clipId = selectedClips[ch.toString()];
+      if (!clipId) continue;
+      for (let s = 0; s < numSteps; s++) {
+        if (Math.random() > 0.8) {
+          newGrid[`${ch}-${s}`] = [{ id: crypto.randomUUID(), clipId, velocity: 0.6 + Math.random() * 0.4, finePitch: 0 }];
+        }
+      }
+    }
+    setGrid(newGrid);
+    toast({ title: "Pattern Randomly Generated" });
+  };
+
   return (
     <div className="flex flex-col gap-1 h-full select-none">
       {/* DAW TOOLBAR */}
@@ -208,18 +227,22 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
           >
             {isPlaying ? <Square className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current" />}
           </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/5" onClick={handleRandomize}>
+            <Wand2 className="w-4 h-4" />
+          </Button>
         </div>
 
-        <div className="flex items-center gap-4 bg-black/40 px-6 py-1 rounded-sm border border-white/5">
-           <div className="flex flex-col items-center">
-              <span className="text-[8px] text-primary/60 font-black uppercase leading-none">BPM</span>
-              <span className="text-xl font-black text-primary leading-none tracking-tighter">{bpm.toFixed(3)}</span>
+        <div className="flex items-center gap-8 bg-black/40 px-6 py-1 rounded-sm border border-white/5">
+           <div className="flex flex-col items-center min-w-[100px]">
+              <span className="text-[8px] text-primary/60 font-black uppercase leading-none mb-1">BPM: {bpm.toFixed(1)}</span>
+              <Slider value={[bpm]} min={60} max={200} step={0.1} onValueChange={(v) => setBpm(v[0])} className="w-24" />
            </div>
            <div className="w-px h-8 bg-white/10" />
-           <div className="flex flex-col items-center">
-              <span className="text-[8px] text-primary/60 font-black uppercase leading-none">TIME</span>
-              <span className="text-xl font-black text-primary leading-none tracking-tighter">1:03:07</span>
+           <div className="flex flex-col items-center min-w-[100px]">
+              <span className="text-[8px] text-primary/60 font-black uppercase leading-none mb-1">STEPS: {numSteps}</span>
+              <Slider value={[numSteps]} min={8} max={64} step={8} onValueChange={(v) => setNumSteps(v[0])} className="w-24" />
            </div>
+           <div className="w-px h-8 bg-white/10" />
            <div className="w-40 h-8">
               <MasterVisualizer analyser={masterAnalyserRef.current} />
            </div>
@@ -227,7 +250,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
         <div className="flex items-center gap-2">
            <Button variant="ghost" size="sm" className="h-8 px-4 text-[10px] font-black uppercase text-primary border border-primary/20 hover:bg-primary/5" onClick={handleSave}>
-              <Save className="w-3 h-3 mr-2" /> Save
+              <Save className="w-3 h-3 mr-2" /> Commit Pattern
            </Button>
         </div>
       </div>
@@ -249,25 +272,44 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-0.5">
           {Array.from({ length: numChannels }).map((_, chIdx) => {
             const chKey = chIdx.toString();
-            const s = channelSettings[chKey];
-            const activeClip = clips.find(c => c.id === selectedClips[chKey]);
+            const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
+            const activeClipId = selectedClips[chKey];
+            const activeClip = clips.find(c => c.id === activeClipId);
             
             return (
               <div key={chIdx} className={cn("flex items-center gap-2 h-9 p-1 group hover:bg-white/5", selectedChannelForGraph === chIdx && "bg-primary/5")}>
                 {/* MUTE / PAN / VOL */}
                 <button 
                   onClick={() => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], muted: !s.muted }}))}
-                  className={cn("w-3 h-3 rounded-full border border-black daw-button-inner", s.muted ? "bg-red-900/40" : "bg-primary shadow-[0_0_6px_rgba(255,153,0,0.6)]")} 
+                  className={cn("w-3 h-3 rounded-full border border-black daw-button-inner transition-colors", s.muted ? "bg-red-900/40" : "bg-primary shadow-[0_0_6px_rgba(255,153,0,0.6)]")} 
                 />
                 
                 <div className="flex items-center gap-1 shrink-0">
-                  <div className="w-6 h-6 rounded-full bg-[#111] daw-button-inner flex items-center justify-center relative cursor-ns-resize group/knob">
+                  <div className="w-6 h-6 rounded-full bg-[#111] daw-button-inner flex items-center justify-center relative cursor-ns-resize group/knob"
+                       onMouseDown={(e) => {
+                         const startY = e.clientY;
+                         const startPan = s.pan;
+                         const handleMove = (me: MouseEvent) => {
+                           const delta = (startY - me.clientY) * 0.01;
+                           setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], pan: Math.max(-1, Math.min(1, startPan + delta)) }}));
+                         };
+                         const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
+                         window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
+                       }}>
                     <div className="absolute top-0 bottom-0 left-[50%] w-0.5 bg-primary/40 origin-center transition-transform" style={{ transform: `rotate(${s.pan * 150}deg)` }} />
-                    <span className="absolute -top-6 left-0 opacity-0 group-hover/knob:opacity-100 transition-opacity text-[8px] bg-black px-1 rounded">PAN</span>
                   </div>
-                  <div className="w-6 h-6 rounded-full bg-[#111] daw-button-inner flex items-center justify-center relative cursor-ns-resize group/knob">
+                  <div className="w-6 h-6 rounded-full bg-[#111] daw-button-inner flex items-center justify-center relative cursor-ns-resize group/knob"
+                       onMouseDown={(e) => {
+                         const startY = e.clientY;
+                         const startVol = s.volume;
+                         const handleMove = (me: MouseEvent) => {
+                           const delta = (startY - me.clientY) * 0.01;
+                           setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], volume: Math.max(0, Math.min(1.5, startVol + delta)) }}));
+                         };
+                         const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
+                         window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
+                       }}>
                     <div className="absolute top-0 bottom-0 left-[50%] w-0.5 bg-primary origin-center transition-transform" style={{ transform: `rotate(${(s.volume - 0.5) * 300}deg)` }} />
-                    <span className="absolute -top-6 left-0 opacity-0 group-hover/knob:opacity-100 transition-opacity text-[8px] bg-black px-1 rounded">VOL</span>
                   </div>
                 </div>
 
@@ -321,7 +363,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
             className="w-full h-8 text-[9px] font-black uppercase text-muted-foreground hover:text-white hover:bg-white/5 mt-4 border border-dashed border-white/5"
             onClick={() => setNumChannels(p => Math.min(16, p + 1))}
           >
-            <Plus className="w-3 h-3 mr-2" /> Add Channel
+            <Plus className="w-3 h-3 mr-2" /> Add Mixer Channel
           </Button>
         </div>
 
@@ -330,10 +372,9 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
            <div className="flex items-center justify-between px-2">
               <div className="flex gap-4">
                  <button className="text-[9px] font-black text-primary uppercase tracking-widest border-b border-primary">Velocity</button>
-                 <button className="text-[9px] font-black text-muted-foreground uppercase tracking-widest hover:text-white">Fine Pitch</button>
                  <button className="text-[9px] font-black text-muted-foreground uppercase tracking-widest hover:text-white">Panning</button>
               </div>
-              <span className="text-[8px] font-bold text-muted-foreground uppercase">Editing: Channel {selectedChannelForGraph + 1}</span>
+              <span className="text-[8px] font-bold text-muted-foreground uppercase">Modifying: Ch {selectedChannelForGraph + 1}</span>
            </div>
            
            <div className="flex-1 flex gap-1 items-end pt-4 px-2">
@@ -344,36 +385,28 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 return (
                   <div key={stepIdx} className="flex-1 h-full flex flex-col justify-end group/bar">
                      <div 
-                        className={cn("w-full rounded-t-sm transition-all daw-button-outer", velocity > 0 ? "bg-primary/60 group-hover/bar:bg-primary" : "bg-white/5")}
+                        className={cn("w-full rounded-t-sm transition-all daw-button-outer cursor-ns-resize", velocity > 0 ? "bg-primary/60 group-hover/bar:bg-primary" : "bg-white/5")}
                         style={{ height: `${velocity * 100}%` }}
-                        onClick={(e) => {
+                        onMouseDown={(e) => {
                           const rect = e.currentTarget.parentElement?.getBoundingClientRect();
                           if (!rect) return;
-                          const val = Math.max(0.1, Math.min(1.0, 1 - (e.clientY - rect.top) / rect.height));
-                          const key = `${selectedChannelForGraph}-${stepIdx}`;
-                          if (grid[key]) {
-                            const ng = { ...grid };
-                            ng[key] = ng[key].map(n => ({ ...n, velocity: val }));
-                            setGrid(ng);
-                          }
+                          const handleMove = (me: MouseEvent) => {
+                            const val = Math.max(0.05, Math.min(1.0, 1 - (me.clientY - rect.top) / rect.height));
+                            const key = `${selectedChannelForGraph}-${stepIdx}`;
+                            if (grid[key]) {
+                              const ng = { ...grid };
+                              ng[key] = ng[key].map(n => ({ ...n, velocity: val }));
+                              setGrid(ng);
+                            }
+                          };
+                          const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
+                          window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
                         }}
                      />
                   </div>
                 );
               })}
            </div>
-        </div>
-      </div>
-
-      {/* FOOTER METRICS */}
-      <div className="bg-black border-t border-white/5 h-6 flex items-center justify-between px-4 text-[8px] font-bold text-muted-foreground uppercase tracking-[0.3em]">
-        <div className="flex gap-6">
-           <span className="flex items-center gap-1"><Activity className="w-2.5 h-2.5 text-primary" /> ASSET_LOADED: {clips.length}</span>
-           <span>ENGINE_STABLE: 44.1KHZ</span>
-        </div>
-        <div className="flex gap-4">
-           <span>v25.1.5 [BUILD 4976]</span>
-           <span className="text-primary italic">DROP_IT_READY</span>
         </div>
       </div>
     </div>
