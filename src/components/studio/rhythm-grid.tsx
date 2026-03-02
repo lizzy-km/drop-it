@@ -320,14 +320,19 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
+      a.style.display = 'none';
       a.href = url;
       a.download = `${title.toLowerCase().replace(/\s+/g, '_')}_project.json`;
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast({ title: "Project Exported" });
-    } catch (err) { toast({ title: "Export Failed", variant: "destructive" }); }
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 0);
+      toast({ title: "Project Exported to Disk" });
+    } catch (err) {
+      toast({ title: "Export Failed", variant: "destructive" });
+    }
   };
 
   const handleImportProject = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -339,11 +344,18 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         const data = JSON.parse(event.target?.result as string);
         if (data.type === "DROPIT_PROJECT") {
           const t = data.track;
-          setTitle(t.title); setBpm(t.bpm); setNumSteps(t.numSteps); setNumChannels(t.numChannels);
-          setGrid(t.grid); setChannelSettings(t.channelSettings); setSelectedClips(t.selectedClips);
-          toast({ title: "Project Loaded" });
+          setTitle(t.title); 
+          setBpm(t.bpm); 
+          setNumSteps(t.numSteps); 
+          setNumChannels(t.numChannels);
+          setGrid(t.grid); 
+          setChannelSettings(t.channelSettings); 
+          setSelectedClips(t.selectedClips);
+          toast({ title: "Project Loaded Successfully" });
         }
-      } catch (err) { toast({ title: "Import Error", variant: "destructive" }); }
+      } catch (err) {
+        toast({ title: "Import Error", description: "Unsupported project schema.", variant: "destructive" });
+      }
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -533,7 +545,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                   onClick={() => setSelectedChannelForGraph(chIdx)}
                 >
                   {/* STICKY CHANNEL CONTROLS */}
-                  <div className="sticky left-0 flex items-center gap-2 bg-[#1e2329] z-20 pr-4 border-r border-white/5 shadow-[5px_0_10px_rgba(0,0,0,0.3)]">
+                  <div className="sticky left-0 flex items-center gap-2 bg-[#1e2329] z-20 pr-4 border-r border-white/5 shadow-[5px_0_10px_rgba(0,0,0,0.3)] w-[260px] shrink-0">
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button 
                         onClick={(e) => { e.stopPropagation(); setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], muted: !s.muted }})); }}
@@ -702,7 +714,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
              onScroll={handleGraphScroll}
              className="flex-1 overflow-x-hidden relative"
            >
-              <div className="flex gap-1 items-end h-full min-w-max pl-[260px]"> {/* Offset to match sticky headers */}
+              <div className="flex gap-1 items-end h-full min-w-max pl-[260px]"> {/* Match the sticky control section width */}
                 {Array.from({ length: numSteps }).map((_, stepIdx) => {
                   const notes = grid[`${selectedChannelForGraph}-${stepIdx}`] || [];
                   const val = getGraphValue(stepIdx);
