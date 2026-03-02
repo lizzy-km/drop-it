@@ -315,6 +315,46 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     toast({ title: "Channel Cleared" });
   };
 
+  const deleteChannel = (chIdx: number) => {
+    if (numChannels <= 1) {
+      toast({ title: "Operation Denied", description: "Studio requires at least one channel.", variant: "destructive" });
+      return;
+    }
+
+    const newGrid: Record<string, NoteProperty[]> = {};
+    Object.entries(grid).forEach(([key, value]) => {
+      const parts = key.split('-');
+      const ch = parseInt(parts[0]);
+      const step = parts[1];
+      if (ch === chIdx) return;
+      const targetCh = ch > chIdx ? ch - 1 : ch;
+      newGrid[`${targetCh}-${step}`] = value;
+    });
+
+    const newSettings: Record<string, ChannelSettings> = {};
+    const newClips: Record<string, string> = {};
+
+    for (let i = 0; i < numChannels; i++) {
+      if (i === chIdx) continue;
+      const targetIdx = i > chIdx ? i - 1 : i;
+      newSettings[targetIdx.toString()] = channelSettings[i.toString()] || DEFAULT_CHANNEL_SETTINGS;
+      newClips[targetIdx.toString()] = selectedClips[i.toString()] || '';
+    }
+
+    setGrid(newGrid);
+    setChannelSettings(newSettings);
+    setSelectedClips(newClips);
+    setNumChannels(prev => prev - 1);
+    
+    if (selectedChannelForGraph === chIdx) {
+      setSelectedChannelForGraph(Math.max(0, chIdx - 1));
+    } else if (selectedChannelForGraph > chIdx) {
+      setSelectedChannelForGraph(prev => prev - 1);
+    }
+
+    toast({ title: "Channel Deleted", description: `Removed track ${chIdx + 1}` });
+  };
+
   const handleSave = () => {
     const t: Track = {
       id: track?.id || crypto.randomUUID(),
@@ -592,8 +632,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                             <Dice5 className="w-3 h-3 mr-2" /> Humanize Velocity
                           </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-white/5" />
-                          <DropdownMenuItem onClick={() => clearChannel(chIdx)} className="text-[9px] font-black uppercase text-destructive hover:bg-destructive/10 cursor-pointer">
+                          <DropdownMenuItem onClick={() => clearChannel(chIdx)} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
                             <Eraser className="w-3 h-3 mr-2" /> Clear Pattern
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator className="bg-white/5" />
+                          <DropdownMenuItem onClick={() => deleteChannel(chIdx)} className="text-[9px] font-black uppercase text-destructive hover:bg-destructive/10 cursor-pointer">
+                            <Trash2 className="w-3 h-3 mr-2" /> Delete Channel
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
