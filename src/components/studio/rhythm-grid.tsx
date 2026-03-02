@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const DEFAULT_CHANNELS = 8;
-const MAX_STEPS = 64;
+const MAX_STEPS = 512;
 
 type GraphProperty = 'velocity' | 'finePitch' | 'panOffset' | 'cutoffOffset' | 'resOffset';
 
@@ -92,6 +92,8 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const nextNoteTimeRef = useRef<number>(0);
   const currentStepRef = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const stepContainerRef = useRef<HTMLDivElement>(null);
+  const graphContainerRef = useRef<HTMLDivElement>(null);
 
   const initAudio = useCallback(() => {
     if (!audioContextRef.current) {
@@ -417,6 +419,16 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     setGrid(newGrid);
   };
 
+  // Synchronize horizontal scrolling between sequencer and graph editor
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target === stepContainerRef.current && graphContainerRef.current) {
+      graphContainerRef.current.scrollLeft = target.scrollLeft;
+    } else if (target === graphContainerRef.current && stepContainerRef.current) {
+      stepContainerRef.current.scrollLeft = target.scrollLeft;
+    }
+  };
+
   return (
     <div 
       className="flex flex-col gap-1 h-full select-none"
@@ -476,7 +488,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
            <div className="flex flex-col items-center min-w-[120px] gap-1">
               <span className="text-[8px] text-primary/60 font-black uppercase leading-none">STEPS: {numSteps}</span>
               <div className="flex items-center gap-2 w-full">
-                <Slider value={[numSteps]} min={8} max={64} step={8} onValueChange={(v) => setNumSteps(v[0])} className="flex-1" />
+                <Slider value={[numSteps]} min={8} max={512} step={8} onValueChange={(v) => setNumSteps(v[0])} className="flex-1" />
                 <input 
                   type="number" 
                   value={numSteps} 
@@ -606,27 +618,34 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                    </Select>
                 </div>
 
-                <div className="flex-1 flex gap-1 h-full items-center">
-                  {Array.from({ length: numSteps }).map((_, stepIdx) => {
-                    const groupIdx = Math.floor(stepIdx / 4);
-                    const isGroupLight = groupIdx % 2 === 0;
-                    const notes = grid[`${chIdx}-${stepIdx}`] || [];
-                    const isActive = notes.length > 0;
-                    const isCurrent = stepIdx === currentStep;
+                {/* SCROLLABLE STEP AREA */}
+                <div 
+                  ref={stepContainerRef}
+                  onScroll={handleScroll}
+                  className="flex-1 flex gap-1 h-full items-center overflow-x-auto custom-scrollbar scroll-smooth whitespace-nowrap"
+                >
+                  <div className="flex gap-1 h-full items-center min-w-max">
+                    {Array.from({ length: numSteps }).map((_, stepIdx) => {
+                      const groupIdx = Math.floor(stepIdx / 4);
+                      const isGroupLight = groupIdx % 2 === 0;
+                      const notes = grid[`${chIdx}-${stepIdx}`] || [];
+                      const isActive = notes.length > 0;
+                      const isCurrent = stepIdx === currentStep;
 
-                    return (
-                      <button
-                        key={stepIdx}
-                        onMouseDown={(e) => { e.stopPropagation(); setIsMouseDown(true); toggleStep(chIdx, stepIdx, true); }}
-                        onMouseEnter={() => { if (isMouseDown) toggleStep(chIdx, stepIdx); }}
-                        className={cn(
-                          "flex-1 h-6 rounded-[1px] transition-all transform active:scale-95 daw-button-outer",
-                          isActive ? "step-active" : (isGroupLight ? "step-inactive-light" : "step-inactive-dark"),
-                          isCurrent && "ring-1 ring-white brightness-125 scale-105 z-10 shadow-[0_0_10px_white]"
-                        )}
-                      />
-                    );
-                  })}
+                      return (
+                        <button
+                          key={stepIdx}
+                          onMouseDown={(e) => { e.stopPropagation(); setIsMouseDown(true); toggleStep(chIdx, stepIdx, true); }}
+                          onMouseEnter={() => { if (isMouseDown) toggleStep(chIdx, stepIdx); }}
+                          className={cn(
+                            "w-6 h-6 rounded-[1px] transition-all transform active:scale-95 daw-button-outer flex-shrink-0",
+                            isActive ? "step-active" : (isGroupLight ? "step-inactive-light" : "step-inactive-dark"),
+                            isCurrent && "ring-1 ring-white brightness-125 scale-105 z-10 shadow-[0_0_10px_white]"
+                          )}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div onClick={(e) => e.stopPropagation()}>
@@ -660,7 +679,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         </div>
 
         {/* GRAPH EDITOR PANEL */}
-        <div className="h-48 bg-[#1a1f25] border-t border-black p-3 flex flex-col gap-3 shadow-inner">
+        <div className="h-48 bg-[#1a1f25] border-t border-black p-3 flex flex-col gap-3 shadow-inner overflow-hidden">
            <div className="flex items-center justify-between px-2">
               <div className="flex gap-2 bg-black/40 p-1 rounded-xl border border-white/5">
                  {[
@@ -688,35 +707,42 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               </div>
            </div>
            
-           <div className="flex-1 flex gap-1 items-end pt-2 px-2 border-l border-white/5 ml-2">
-              {Array.from({ length: numSteps }).map((_, stepIdx) => {
-                const notes = grid[`${selectedChannelForGraph}-${stepIdx}`] || [];
-                const val = getGraphValue(stepIdx);
-                const isActive = notes.length > 0;
-                
-                return (
-                  <div key={stepIdx} className="flex-1 h-full flex flex-col justify-end group/bar relative">
-                     <div 
-                        className={cn(
-                          "w-full rounded-t-sm transition-all daw-button-outer cursor-ns-resize", 
-                          isActive ? "bg-primary/60 group-hover/bar:bg-primary shadow-[0_0_10px_rgba(255,153,0,0.2)]" : "bg-white/5"
-                        )}
-                        style={{ height: `${isActive ? (val * 100) : 0}%` }}
-                        onMouseDown={(e) => {
-                          const rect = e.currentTarget.parentElement?.getBoundingClientRect();
-                          if (!rect) return;
-                          const handleMove = (me: MouseEvent) => {
-                            const raw = Math.max(0, Math.min(1, 1 - (me.clientY - rect.top) / rect.height));
-                            updateGraphValue(stepIdx, raw);
-                          };
-                          const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
-                          window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
-                        }}
-                     />
-                     {stepIdx % 4 === 0 && <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary/20" />}
-                  </div>
-                );
-              })}
+           {/* SCROLLABLE GRAPH AREA */}
+           <div 
+             ref={graphContainerRef}
+             onScroll={handleScroll}
+             className="flex-1 flex gap-1 items-end pt-2 px-2 border-l border-white/5 ml-2 overflow-x-auto custom-scrollbar scroll-smooth"
+           >
+              <div className="flex gap-1 items-end h-full min-w-max">
+                {Array.from({ length: numSteps }).map((_, stepIdx) => {
+                  const notes = grid[`${selectedChannelForGraph}-${stepIdx}`] || [];
+                  const val = getGraphValue(stepIdx);
+                  const isActive = notes.length > 0;
+                  
+                  return (
+                    <div key={stepIdx} className="w-6 h-full flex flex-col justify-end group/bar relative flex-shrink-0">
+                       <div 
+                          className={cn(
+                            "w-full rounded-t-sm transition-all daw-button-outer cursor-ns-resize", 
+                            isActive ? "bg-primary/60 group-hover/bar:bg-primary shadow-[0_0_10px_rgba(255,153,0,0.2)]" : "bg-white/5"
+                          )}
+                          style={{ height: `${isActive ? (val * 100) : 0}%` }}
+                          onMouseDown={(e) => {
+                            const rect = e.currentTarget.parentElement?.getBoundingClientRect();
+                            if (!rect) return;
+                            const handleMove = (me: MouseEvent) => {
+                              const raw = Math.max(0, Math.min(1, 1 - (me.clientY - rect.top) / rect.height));
+                              updateGraphValue(stepIdx, raw);
+                            };
+                            const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
+                            window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
+                          }}
+                       />
+                       {stepIdx % 4 === 0 && <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary/20" />}
+                    </div>
+                  );
+                })}
+              </div>
            </div>
         </div>
       </div>
