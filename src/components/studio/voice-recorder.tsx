@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Mic, Square, Save, RotateCcw, Disc, Cross, PlusIcon, SidebarCloseIcon } from 'lucide-react';
+import { Mic, Square, Save, RotateCcw, Disc, Cross, PlusIcon, SidebarCloseIcon, Edit3Icon } from 'lucide-react';
 import { CHARACTER_TYPES } from '@/components/character-icons';
 import { cn } from '@/lib/utils';
 import { db, User } from '@/lib/db';
@@ -100,26 +100,32 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
   };
 
   return (
-    <div className="glass-panel rounded-[2.5rem] p-12 space-y-10 flex flex-col gold-border">
-      <div className="flex items-center justify-between">
-        <h3 className="text-3xl font-black flex items-center gap-4 italic tracking-tighter text-primary">
-          <Mic className="w-7 h-7  " /> CAPTURE
+    <div className="glass-panel rounded  py-4 flex flex-col gold-border">
+      <div className="flex   w-full items-center  justify-between">
+        <h3 className="  font-black flex items-center gap-2 italic tracking-tighter text-primary">
+          <Mic className="w-5 h-5 border-b border-primary/60  " /> CAPTURE
         </h3>
-        <input
-          value={clipName}
-          onChange={(e) => setClipName(e.target.value.toUpperCase())}
-          placeholder="TRACK_NAME"
-          className="text-xs font-black bg-transparent border-none focus:ring-0 text-right text-primary outline-none tracking-[0.3em] uppercase"
-        />
+
+        <div className=' flex gap-1  text-primary  ' >
+         
+          <input
+            value={clipName}
+            onChange={(e) => setClipName(e.target.value.toUpperCase())}
+            placeholder="TRACK_NAME"
+            className="text-[8px]  border-b font-black bg-transparent border-none focus:ring-0 text-right text-primary/90 outline-none tracking-[0.3em] uppercase"
+          />
+           <Edit3Icon size={11} />
+        </div>
+
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center bg-black/40 rounded-[2.5rem] p-12 min-h-[250px] border border-primary/10 relative group overflow-hidden shadow-inner">
+      <div className="flex-1 flex flex-col w-full items-center justify-center bg-black/40 rounded-[2.5rem]  min-h-[250px] border border-primary/10 relative group overflow-hidden shadow-inner">
         {isRecording ? (
-          <div className="flex flex-col items-center gap-8">
-            <div className="w-28 h-28 rounded-full bg-red-500/10 border-4 border-red-500 flex items-center justify-center animate-pulse">
+          <div className="flex w-full flex-col pb-10 items-center gap-8">
+            <div className="w-[100] h-[100] flex-col rounded-full bg-red-500/10 border-4 border-red-500 flex items-center justify-center animate-pulse">
               <div onClick={stopRecording} className="w-12 h-12 cursor-pointer bg-red-500 rounded-xl" />
             </div>
-            <p className="text-red-500 font-black text-xs uppercase tracking-[0.4em]">Signal Recording...</p>
+            <p className="text-red-500  font-black text-xs uppercase tracking-[0.4em]">Signal Recording...</p>
           </div>
         ) : audioUrl ? (
           <div className="flex flex-col items-center gap-10 w-full animate-in fade-in zoom-in-95">
@@ -127,7 +133,9 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
               <audio src={audioUrl} controls className="w-full h-8 opacity-60 invert" />
             </div>
             <div className="flex gap-3 flex-wrap w-full">
-              <Button variant="outline" className="flex-1 h-14 rounded-full font-black uppercase tracking-widest border-primary/20 bg-black/20" onClick={() => setAudioUrl(null)}>
+              <Button variant="outline" className="flex-1 h-14 rounded-full font-black uppercase tracking-widest border-primary/20 bg-black/20" onClick={() =>{ setAudioUrl(null)
+               setIsRecording(true)
+              }}>
                 <RotateCcw className="w-4 h-4 mr-2" /> Redo
               </Button>
 
@@ -135,7 +143,7 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
                 <Save className="w-4 h-4 mr-2" /> Commit
               </Button>
 
-              <Button onClick={()=>{
+              <Button onClick={() => {
                 setIsRecording(false)
                 setAudioUrl(null);
 
@@ -146,7 +154,7 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
           </div>
         ) : (
           <Button
-            className="w-28 h-28 rounded-[2.5rem] bg-primary hover:bg-primary/90 text-black shadow-2xl transition-transform hover:scale-110 active:scale-95 gold-shadow"
+            className="w-[60] h-[60] rounded-lg bg-primary hover:bg-primary/90 text-black shadow-2xl transition-transform hover:scale-110 active:scale-95 gold-shadow"
             onClick={() => setIsRecording(true)}
           >
             <Mic className="w-12 h-12" />
@@ -162,7 +170,7 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
 
       <div className="space-y-5">
         <label className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.3em] px-2">Assigned Visualizer</label>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-4 border-primary/30 border px-3 py-2 rounded-xl gap-2">
           {CHARACTER_TYPES.map((char) => {
             const Icon = char.icon;
             return (
@@ -170,13 +178,13 @@ export function VoiceRecorder({ user, onClipSaved }: { user: User; onClipSaved: 
                 key={char.id}
                 onClick={() => setSelectedChar(char.id)}
                 className={cn(
-                  "p-5 rounded-3xl border-2 transition-all flex flex-col items-center gap-2",
+                  "p-1 w-10 h-10 rounded-full border-2 transition-all flex flex-col items-center gap-2",
                   selectedChar === char.id
-                    ? "border-primary bg-primary/10 shadow-lg"
+                    ? "border-primary/70 bg-primary/10 shadow-lg"
                     : "border-transparent bg-black/40 hover:bg-neutral-800"
                 )}
               >
-                <Icon className={cn("w-9 h-9", char.color)} />
+                <Icon className={cn("w-full h-full", char.color)} />
               </button>
             );
           })}

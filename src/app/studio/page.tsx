@@ -70,7 +70,7 @@ function StudioContent() {
         {/* SURGICAL SIDE BROWSER */}
         <aside className={cn(
           "bg-[#111] border-r border-black transition-all duration-300 flex flex-col",
-          isBrowserOpen ? "w-64" : "w-0 overflow-hidden"
+          isBrowserOpen ? "w-[300]" : "w-0 overflow-hidden"
         )}>
           <div className="h-12 border-b border-black flex items-center px-4 gap-3 bg-[#181c22]">
             <FolderOpen className="w-4 h-4 text-muted-foreground" />

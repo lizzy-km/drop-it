@@ -9,7 +9,8 @@ import {
   BarChart3, Music2, Wand2, Download, Upload,
   ListMusic, SlidersHorizontal, MousePointer2,
   FileDown, FileUp, ChevronRight, ArrowLeftRight,
-  RefreshCcw, Eraser, Dice5, MoveHorizontal
+  RefreshCcw, Eraser, Dice5, MoveHorizontal,
+  ArrowDown
 } from 'lucide-react';
 import { db, User, AudioClip, Track, ChannelSettings, NoteProperty } from '@/lib/db';
 import { cn } from '@/lib/utils';
@@ -537,7 +538,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         <div className="flex items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:bg-white/5">File</Button>
+              <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:text-white/80 hover:bg-white/20"> <ChevronDown/> File</Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="glass-panel border-primary/20 bg-black/90 p-1 min-w-[180px]">
               <DropdownMenuItem onClick={handleSave} className="text-[10px] font-black uppercase text-primary hover:bg-primary/10 cursor-pointer">
