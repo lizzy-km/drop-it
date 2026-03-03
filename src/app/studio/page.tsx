@@ -69,7 +69,7 @@ function StudioContent() {
       <div className="flex-1 flex overflow-hidden">
         {/* SURGICAL SIDE BROWSER */}
         <aside className={cn(
-          "bg-[#111] border-r border-black transition-all duration-300 flex flex-col",
+          "bg-[#111] border-r w-[300] border-black transition-all duration-300 flex flex-col",
           isBrowserOpen ? "w-[300]" : "w-0 overflow-hidden"
         )}>
           <div className="h-12 border-b border-black flex items-center px-4 gap-3 bg-[#181c22]">
