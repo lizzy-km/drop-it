@@ -6,6 +6,8 @@ import { Slider } from "../ui/slider";
 import { cn } from "@/lib/utils";
 import { AudioClip, db, Track } from "@/lib/db";
 import { toast } from "@/hooks/use-toast";
+import { getHotkeyHandler, useHotkeys } from '@mantine/hooks';
+import { set } from "zod";
 
 const MAX_STEPS = 64;
 
@@ -170,6 +172,8 @@ export default function StudioHeader(props: { setNumSteps: (val: number) => void
         }
     };
 
+
+    
 
     return (
         <div className="flex w-full flex-col lg:flex-row items-end justify-between gap-12 relative z-10">

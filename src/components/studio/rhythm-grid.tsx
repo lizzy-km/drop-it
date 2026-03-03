@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  Play, Square, Save, Trash2, Plus, 
+  Play, Square, Save, Trash2, Plus,
   Settings, Volume2, Activity, Maximize2,
-  ChevronDown, MoreHorizontal, Power, 
+  ChevronDown, MoreHorizontal, Power,
   BarChart3, Music2, Wand2, Download, Upload,
   ListMusic, SlidersHorizontal, MousePointer2,
   FileDown, FileUp, ChevronRight, ArrowLeftRight,
@@ -16,12 +16,12 @@ import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { Slider } from '@/components/ui/slider';
 import { MasterVisualizer } from './visualizers';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from '@/components/ui/select';
 import {
   DropdownMenu,
@@ -31,7 +31,8 @@ import {
   DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { ChannelSettingsDialog } from './channel-settings-dialog';
-import StudioHeader from './Header';
+// import StudioHeader from './Header';
+import { getHotkeyHandler } from '@mantine/hooks';
 
 const DEFAULT_CHANNELS = 8;
 const MAX_STEPS = 512;
@@ -65,7 +66,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   const [title, setTitle] = useState(track?.title || 'UNNAMED_PATTERN_1');
   const [selectedChannelForGraph, setSelectedChannelForGraph] = useState(0);
   const [activeGraphProperty, setActiveGraphProperty] = useState<GraphProperty>('velocity');
-  
+
   const [isMouseDown, setIsMouseDown] = useState(false);
   const [lastToggledStep, setLastToggledStep] = useState<string | null>(null);
 
@@ -150,7 +151,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     const safeVolume = isFinite(s.volume) ? s.volume : 0.8;
     const safePan = isFinite(s.pan) ? Math.max(-1, Math.min(1, s.pan)) : 0;
     const safePitch = isFinite(s.pitch) ? Math.max(0.1, s.pitch) : 1.0;
-    
+
     const safeVelocity = isFinite(note.velocity) ? note.velocity : 1.0;
     const safeFinePitch = isFinite(note.finePitch) ? note.finePitch : 0;
     const notePanOffset = isFinite(note.panOffset) ? note.panOffset : 0;
@@ -171,10 +172,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const baseCut = isFinite(s.svfCut) ? s.svfCut : 1.0;
       const finalCut = Math.max(0, Math.min(1, baseCut + noteCutoffOffset));
       const freq = Math.max(20, Math.min(20000, 20 + (Math.pow(finalCut, 2) * 19980)));
-      
+
       const baseRes = isFinite(s.svfEmph) ? s.svfEmph : 0.2;
       const finalRes = Math.max(0, Math.min(1, baseRes + noteResOffset));
-      
+
       filterNode.frequency.setValueAtTime(freq, time);
       filterNode.Q.setValueAtTime(Math.max(0.0001, finalRes * 20), time);
     } else {
@@ -198,17 +199,17 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       const step = currentStepRef.current;
       const stepLimit = numStepsRef.current;
       const chLimit = numChannelsRef.current;
-      
+
       for (let ch = 0; ch < chLimit; ch++) {
         const notes = gridRef.current[`${ch}-${step}`];
         if (notes) {
           notes.forEach(n => playNote(n, ch.toString(), nextNoteTimeRef.current));
         }
       }
-      
+
       nextNoteTimeRef.current += secondsPerStep;
       currentStepRef.current = (currentStepRef.current + 1) % stepLimit;
-      
+
       const captureStep = step;
       setTimeout(() => setCurrentStep(captureStep), Math.max(0, (nextNoteTimeRef.current - ctx.currentTime) * 1000));
     }
@@ -244,10 +245,10 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
       newGrid[key] = current.filter(n => n.clipId !== clipId);
       if (newGrid[key].length === 0) delete newGrid[key];
     } else {
-      newGrid[key] = [...current, { 
-        id: crypto.randomUUID(), 
-        clipId, 
-        velocity: 0.8, 
+      newGrid[key] = [...current, {
+        id: crypto.randomUUID(),
+        clipId,
+        velocity: 0.8,
         finePitch: 0,
         panOffset: 0,
         cutoffOffset: 0,
@@ -346,7 +347,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     setChannelSettings(newSettings);
     setSelectedClips(newClips);
     setNumChannels(prev => prev - 1);
-    
+
     if (selectedChannelForGraph === chIdx) {
       setSelectedChannelForGraph(Math.max(0, chIdx - 1));
     } else if (selectedChannelForGraph > chIdx) {
@@ -404,12 +405,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         const data = JSON.parse(event.target?.result as string);
         if (data.type === "DROPIT_PROJECT") {
           const t = data.track;
-          setTitle(t.title); 
-          setBpm(t.bpm); 
-          setNumSteps(t.numSteps); 
+          setTitle(t.title);
+          setBpm(t.bpm);
+          setNumSteps(t.numSteps);
           setNumChannels(t.numChannels);
-          setGrid(t.grid); 
-          setChannelSettings(t.channelSettings); 
+          setGrid(t.grid);
+          setChannelSettings(t.channelSettings);
           setSelectedClips(t.selectedClips);
           toast({ title: "Project Loaded Successfully" });
         }
@@ -476,21 +477,21 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   };
 
   function throttle(func: Function, limit: number) {
-  let inThrottle:boolean; 
-  return function(...args: any[]) {
-    if (!inThrottle) {
-      func.apply(this, args); 
-      inThrottle = true;     
+    let inThrottle: boolean;
+    return function (...args: any[]) {
+      if (!inThrottle) {
+        func.apply(this, args);
+        inThrottle = true;
 
-     
-      setTimeout(() => inThrottle = false, limit);
+
+        setTimeout(() => inThrottle = false, limit);
+      }
     }
   }
-}
 
 
 
-  const handleSequencerScroll =throttle( (e: React.UIEvent<HTMLDivElement>) => {
+  const handleSequencerScroll = throttle((e: React.UIEvent<HTMLDivElement>) => {
     if (graphContainerRef.current) {
       // console.log("Sequencer scrolled", e.currentTarget.scrollLeft);
 
@@ -498,21 +499,39 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
     }
   }, 20);
 
-  const handleGraphScroll =throttle( (e: React.UIEvent<HTMLDivElement>) => {
+  const handleGraphScroll = throttle((e: React.UIEvent<HTMLDivElement>) => {
     if (stepContainerRef.current) {
       // console.log("Graph scrolled", e.currentTarget.scrollLeft);
       stepContainerRef.current.scrollLeft = e.currentTarget.scrollLeft;
     }
   }, 20);
 
+
+  function debounce(func: Function, delay: number) {
+
+    let timeOutId: NodeJS.Timeout;
+
+    return function (...args: any[]) {
+      clearTimeout(timeOutId)
+
+
+      timeOutId = setTimeout(() => {
+        func.apply(this, args)
+      }, delay)
+    }
+  }
+
+
+
   return (
-    <div 
+    <div
+
       className="flex flex-col gap-1 h-full w-full max-w-full select-none overflow-hidden"
       onMouseUp={() => { setIsMouseDown(false); setLastToggledStep(null); }}
       onMouseLeave={() => { setIsMouseDown(false); setLastToggledStep(null); }}
     >
       <input type="file" ref={fileInputRef} onChange={handleImportProject} accept=".json" className="hidden" />
-      
+
       {/* DAW TOOLBAR */}
       <div className="flex w-full max-w-full overflow-hidden items-center justify-start bg-[#111] border-b border-white/5 p-1 h-12 shadow-md z-50 shrink-0">
         <div className="flex items-center gap-1">
@@ -532,11 +551,11 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          
+
           {/* <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:bg-white/5">Edit</Button> */}
           <div className="w-px h-4 bg-white/10 mx-2" />
-          
-          <Button 
+
+          <Button
             onClick={() => setIsPlaying(!isPlaying)}
             className={cn("h-8 w-8 rounded-sm daw-button-outer transition-all", isPlaying ? "bg-primary text-black" : "bg-muted text-muted-foreground")}
           >
@@ -548,42 +567,42 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         </div>
 
         <div className="flex items-start gap-8 bg-black/40 px-6 py-1 rounded-sm border border-white/5">
-           <div className="flex flex-col items-center min-w-[120px] gap-1">
-              <span className="text-[8px] text-primary/60 font-black uppercase leading-none">BPM: {bpm.toFixed(1)}</span>
-              <div className="flex items-center gap-2 w-full">
-                <Slider value={[bpm]} min={60} max={200} step={0.1} onValueChange={(v) => setBpm(v[0])} className="flex-1" />
-                <input 
-                  type="number" 
-                  value={bpm.toFixed(1)} 
-                  onChange={(e) => setBpm(Math.max(20, parseFloat(e.target.value) || 120))}
-                  className="w-10 bg-transparent text-[9px] font-bold text-primary border-none focus:ring-0 p-0 text-right"
-                />
-              </div>
-           </div>
-           <div className="w-px h-8 bg-white/10" />
-           <div className="flex flex-col items-center min-w-[120px] gap-1">
-              <span className="text-[8px] text-primary/60 font-black uppercase leading-none">STEPS: {numSteps}</span>
-              <div className="flex items-center gap-2 w-full">
-                <Slider value={[numSteps]} min={8} max={512} step={8} onValueChange={(v) => setNumSteps(v[0])} className="flex-1" />
-                <input 
-                  type="number" 
-                  value={numSteps} 
-                  onChange={(e) => setNumSteps(Math.min(MAX_STEPS, Math.max(8, parseInt(e.target.value) || 16)))}
-                  className="w-8 bg-transparent text-[9px] font-bold text-primary border-none focus:ring-0 p-0 text-right"
-                />
-              </div>
-           </div>
-           <div className="w-px h-8 backdrop-blur-sm bg-white/10" />
-           <div className="w-40  h-8">
-              <MasterVisualizer analyser={masterAnalyserRef.current} />
-           </div>
+          <div className="flex flex-col items-center min-w-[120px] gap-1">
+            <span className="text-[8px] text-primary/60 font-black uppercase leading-none">BPM: {bpm.toFixed(1)}</span>
+            <div className="flex items-center gap-2 w-full">
+              <Slider value={[bpm]} min={60} max={200} step={0.1} onValueChange={(v) => setBpm(v[0])} className="flex-1" />
+              <input
+                type="number"
+                value={bpm.toFixed(1)}
+                onChange={(e) => setBpm(Math.max(20, parseFloat(e.target.value) || 120))}
+                className="w-10 bg-transparent text-[9px] font-bold text-primary border-none focus:ring-0 p-0 text-right"
+              />
+            </div>
+          </div>
+          <div className="w-px h-8 bg-white/10" />
+          <div className="flex flex-col items-center min-w-[120px] gap-1">
+            <span className="text-[8px] text-primary/60 font-black uppercase leading-none">STEPS: {numSteps}</span>
+            <div className="flex items-center gap-2 w-full">
+              <Slider value={[numSteps]} min={8} max={512} step={8} onValueChange={(v) => setNumSteps(v[0])} className="flex-1" />
+              <input
+                type="number"
+                value={numSteps}
+                onChange={(e) => setNumSteps(Math.min(MAX_STEPS, Math.max(8, parseInt(e.target.value) || 16)))}
+                className="w-8 bg-transparent text-[9px] font-bold text-primary border-none focus:ring-0 p-0 text-right"
+              />
+            </div>
+          </div>
+          <div className="w-px h-8 backdrop-blur-sm bg-white/10" />
+          <div className="w-40  h-8">
+            <MasterVisualizer analyser={masterAnalyserRef.current} />
+          </div>
         </div>
 
         <div className="flex items-center gap-2 px-4">
-           <div className="flex flex-col items-end">
-              <span className="text-[9px] font-black text-primary italic uppercase tracking-tighter">{title}</span>
-              <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-widest">MASTER_SIGNAL_ACTIVE</span>
-           </div>
+          <div className="flex flex-col items-end">
+            <span className="text-[9px] font-black text-primary italic uppercase tracking-tighter">{title}</span>
+            <span className="text-[7px] font-bold text-muted-foreground uppercase tracking-widest">MASTER_SIGNAL_ACTIVE</span>
+          </div>
         </div>
       </div>
 
@@ -596,104 +615,104 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Channel Rack</span>
           </div>
           <div className="flex items-center gap-2">
-             <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-white"><BarChart3 className="w-3 h-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-white"><BarChart3 className="w-3 h-3" /></Button>
           </div>
         </div>
 
         {/* SEQUENCER AREA WITH STICKY HEADERS */}
         <div className=' h-[300px] max-h-[300px] overflow-y-auto custom-scrollbar ' >
- <div 
-         
-          className="flex w-full h-auto max-w-full overflow-x-hidden overflow-y-auto custom-scrollbar relative"
-        >
-          <div className="w-[270px]    max-w-[270px] overflow-hidden flex flex-col">
-            {Array.from({ length: numChannels }).map((_, chIdx) => {
-              const chKey = chIdx.toString();
-              const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
-              const activeClipId = selectedClips[chKey];
-              
-              return (
-                <div 
-                  key={chIdx} 
-                  className={cn(
-                    "flex items-center gap-2 h-9 p-1 group hover:bg-white/5 cursor-pointer rounded-sm transition-colors border-b border-white/5 shrink-0", 
-                    selectedChannelForGraph === chIdx ? "bg-primary/5" : ""
-                  )}
-                  onClick={() => setSelectedChannelForGraph(chIdx)}
-                >
-                  {/* STICKY CHANNEL CONTROLS */}
-                  <div className="sticky left-0 flex items-center gap-2 bg-[#1e2329] z-20 pr-4 border-r border-white/5 shadow-[5px_0_10px_rgba(0,0,0,0.3)] w-[260px] shrink-0">
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], muted: !s.muted }})); }}
-                        className={cn("w-3 h-3 rounded-full border border-black daw-button-inner transition-colors shrink-0", s.muted ? "bg-red-900/40" : "bg-primary shadow-[0_0_6px_rgba(255,153,0,0.6)]")} 
-                      />
-                      
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="text-muted-foreground hover:text-primary transition-colors">
-                            <MoreHorizontal className="w-3 h-3" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="glass-panel border-primary/20 bg-black/90 p-1 min-w-[140px]">
-                          <DropdownMenuItem onClick={() => shiftChannel(chIdx, 'left')} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
-                            <ArrowLeftRight className="w-3 h-3 mr-2 rotate-180" /> Shift Left
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => shiftChannel(chIdx, 'right')} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
-                            <ArrowLeftRight className="w-3 h-3 mr-2" /> Shift Right
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-white/5" />
-                          <DropdownMenuItem onClick={() => mirrorChannel(chIdx)} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
-                            <RefreshCcw className="w-3 h-3 mr-2" /> Reverse Pattern
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => humanizeChannel(chIdx)} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
-                            <Dice5 className="w-3 h-3 mr-2" /> Humanize Velocity
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-white/5" />
-                          <DropdownMenuItem onClick={() => clearChannel(chIdx)} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
-                            <Eraser className="w-3 h-3 mr-2" /> Clear Pattern
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-white/5" />
-                          <DropdownMenuItem onClick={() => deleteChannel(chIdx)} className="text-[9px] font-black uppercase text-destructive hover:bg-destructive/10 cursor-pointer">
-                            <Trash2 className="w-3 h-3 mr-2" /> Delete Channel
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                    
-                    <div className="flex items-center gap-1 shrink-0">
-                      <div className="w-6 h-6 rounded-full bg-[#111] daw-button-inner flex items-center justify-center relative cursor-ns-resize group/knob"
-                           title="Panning"
-                           onMouseDown={(e) => {
-                             const startY = e.clientY;
-                             const startPan = s.pan;
-                             const handleMove = (me: MouseEvent) => {
-                               const delta = (startY - me.clientY) * 0.01;
-                               setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], pan: Math.max(-1, Math.min(1, startPan + delta)) }}));
-                             };
-                             const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
-                             window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
-                           }}>
-                        <div className="absolute top-0 bottom-0 left-[50%] w-0.5 bg-primary/40 origin-center transition-transform" style={{ transform: `rotate(${s.pan * 150}deg)` }} />
-                      </div>
-                      <div className="w-6 h-6 rounded-full bg-[#111] daw-button-inner flex items-center justify-center relative cursor-ns-resize group/knob"
-                           title="Volume"
-                           onMouseDown={(e) => {
-                             const startY = e.clientY;
-                             const startVol = s.volume;
-                             const handleMove = (me: MouseEvent) => {
-                               const delta = (startY - me.clientY) * 0.01;
-                               setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], volume: Math.max(0, Math.min(1.5, startVol + delta)) }}));
-                             };
-                             const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
-                             window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
-                           }}>
-                        <div className="absolute top-0 bottom-0 left-[50%] w-0.5 bg-primary origin-center transition-transform" style={{ transform: `rotate(${(s.volume - 0.5) * 300}deg)` }} />
-                      </div>
-                    </div>
+          <div
 
-                    <div className="w-32 flex items-center bg-[#2d333b] rounded-sm daw-button-outer overflow-hidden shrink-0">
-                       <Select value={activeClipId} onValueChange={(val) => changeClip(chKey, val)}>
+            className="flex w-full h-auto max-w-full overflow-x-hidden overflow-y-auto custom-scrollbar relative"
+          >
+            <div className="w-[270px]    max-w-[270px] overflow-hidden flex flex-col">
+              {Array.from({ length: numChannels }).map((_, chIdx) => {
+                const chKey = chIdx.toString();
+                const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
+                const activeClipId = selectedClips[chKey];
+
+                return (
+                  <div
+                    key={chIdx}
+                    className={cn(
+                      "flex items-center gap-2 h-9 p-1 group hover:bg-white/5 cursor-pointer rounded-sm transition-colors border-b border-white/5 shrink-0",
+                      selectedChannelForGraph === chIdx ? "bg-primary/5" : ""
+                    )}
+                    onClick={() => setSelectedChannelForGraph(chIdx)}
+                  >
+                    {/* STICKY CHANNEL CONTROLS */}
+                    <div className="sticky left-0 flex items-center gap-2 bg-[#1e2329] z-20 pr-4 border-r border-white/5 shadow-[5px_0_10px_rgba(0,0,0,0.3)] w-[260px] shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], muted: !s.muted } })); }}
+                          className={cn("w-3 h-3 rounded-full border border-black daw-button-inner transition-colors shrink-0", s.muted ? "bg-red-900/40" : "bg-primary shadow-[0_0_6px_rgba(255,153,0,0.6)]")}
+                        />
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="text-muted-foreground hover:text-primary transition-colors">
+                              <MoreHorizontal className="w-3 h-3" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent className="glass-panel border-primary/20 bg-black/90 p-1 min-w-[140px]">
+                            <DropdownMenuItem onClick={() => shiftChannel(chIdx, 'left')} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
+                              <ArrowLeftRight className="w-3 h-3 mr-2 rotate-180" /> Shift Left
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => shiftChannel(chIdx, 'right')} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
+                              <ArrowLeftRight className="w-3 h-3 mr-2" /> Shift Right
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-white/5" />
+                            <DropdownMenuItem onClick={() => mirrorChannel(chIdx)} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
+                              <RefreshCcw className="w-3 h-3 mr-2" /> Reverse Pattern
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => humanizeChannel(chIdx)} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
+                              <Dice5 className="w-3 h-3 mr-2" /> Humanize Velocity
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-white/5" />
+                            <DropdownMenuItem onClick={() => clearChannel(chIdx)} className="text-[9px] font-black uppercase text-primary/60 hover:text-primary cursor-pointer">
+                              <Eraser className="w-3 h-3 mr-2" /> Clear Pattern
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-white/5" />
+                            <DropdownMenuItem onClick={() => deleteChannel(chIdx)} className="text-[9px] font-black uppercase text-destructive hover:bg-destructive/10 cursor-pointer">
+                              <Trash2 className="w-3 h-3 mr-2" /> Delete Channel
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <div className="w-6 h-6 rounded-full bg-[#111] daw-button-inner flex items-center justify-center relative cursor-ns-resize group/knob"
+                          title="Panning"
+                          onMouseDown={(e) => {
+                            const startY = e.clientY;
+                            const startPan = s.pan;
+                            const handleMove = (me: MouseEvent) => {
+                              const delta = (startY - me.clientY) * 0.01;
+                              setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], pan: Math.max(-1, Math.min(1, startPan + delta)) } }));
+                            };
+                            const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
+                            window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
+                          }}>
+                          <div className="absolute top-0 bottom-0 left-[50%] w-0.5 bg-primary/40 origin-center transition-transform" style={{ transform: `rotate(${s.pan * 150}deg)` }} />
+                        </div>
+                        <div className="w-6 h-6 rounded-full bg-[#111] daw-button-inner flex items-center justify-center relative cursor-ns-resize group/knob"
+                          title="Volume"
+                          onMouseDown={(e) => {
+                            const startY = e.clientY;
+                            const startVol = s.volume;
+                            const handleMove = (me: MouseEvent) => {
+                              const delta = (startY - me.clientY) * 0.01;
+                              setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], volume: Math.max(0, Math.min(1.5, startVol + delta)) } }));
+                            };
+                            const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
+                            window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
+                          }}>
+                          <div className="absolute top-0 bottom-0 left-[50%] w-0.5 bg-primary origin-center transition-transform" style={{ transform: `rotate(${(s.volume - 0.5) * 300}deg)` }} />
+                        </div>
+                      </div>
+
+                      <div className="w-32 flex items-center bg-[#2d333b] rounded-sm daw-button-outer overflow-hidden shrink-0">
+                        <Select value={activeClipId} onValueChange={(val) => changeClip(chKey, val)}>
                           <SelectTrigger className="h-7 border-none bg-transparent focus:ring-0 text-[9px] font-bold uppercase p-1">
                             <SelectValue placeholder="Empty" />
                           </SelectTrigger>
@@ -702,158 +721,201 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                               <SelectItem key={c.id} value={c.id} className="text-[10px] font-bold uppercase">{c.name}</SelectItem>
                             ))}
                           </SelectContent>
-                       </Select>
+                        </Select>
+                      </div>
                     </div>
+
+
                   </div>
+                );
+              })}
 
-                  
-                </div>
-              );
-            })}
+              <Button
+                variant="ghost"
+                className="sticky my-2 left-0 h-8 text-[9px] font-black uppercase text-muted-foreground hover:text-white hover:bg-white/5 mt-4 border border-dashed border-white/5 w-full z-20 shrink-0"
+                onClick={() => setNumChannels(p => Math.min(16, p + 1))}
+              >
+                <Plus className="w-3 h-3 mr-2" /> Add Mixer Channel
+              </Button>
+            </div>
 
-            <Button 
-              variant="ghost" 
-              className="sticky my-2 left-0 h-8 text-[9px] font-black uppercase text-muted-foreground hover:text-white hover:bg-white/5 mt-4 border border-dashed border-white/5 w-full z-20 shrink-0"
-              onClick={() => setNumChannels(p => Math.min(16, p + 1))}
-            >
-              <Plus className="w-3 h-3 mr-2" /> Add Mixer Channel
-            </Button>
-          </div>
+            <div
 
-          <div
-            ref={stepContainerRef}
-          onScroll={handleSequencerScroll}
-           className=' flex flex-col  w-[100%] items-start justify-start h-full custom-scrollbar  max-w-[800px] overflow-auto ' >
-            {
-              Array.from({length:numChannels}).map((_,chIdx)=>{
-                const chKey = chIdx.toString();
-                const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
-                const activeClipId = selectedClips[chKey];
-                const activeClip = clips.find(c => c.id === activeClipId);
-                return (
-                  <div 
-                  onClick={() => setSelectedChannelForGraph(chIdx)}
+              ref={stepContainerRef}
+              onScroll={handleSequencerScroll}
+              className=' flex flex-col  w-[100%] items-start justify-start h-full custom-scrollbar  max-w-[800px] overflow-auto ' >
+              {
+                Array.from({ length: numChannels }).map((_, chIdx) => {
+                  const chKey = chIdx.toString();
+                  const s = channelSettings[chKey] || DEFAULT_CHANNEL_SETTINGS;
+                  const activeClipId = selectedClips[chKey];
+                  const activeClip = clips.find(c => c.id === activeClipId);
+                  return (
+                    <Suspense fallback={<div className={cn(
+                      "flex w-auto items-center gap-2 h-9 p-1 group hover:bg-white/5 cursor-pointer rounded-sm transition-colors border-b border-white/5 shrink-0",
+                      selectedChannelForGraph === chIdx ? "bg-primary/5" : ""
+                    )} ></div>} >
 
-                  key={chIdx} 
-                  className={cn(
-                    "flex w-auto items-center gap-2 h-9 p-1 group hover:bg-white/5 cursor-pointer rounded-sm transition-colors border-b border-white/5 shrink-0", 
-                    selectedChannelForGraph === chIdx ? "bg-primary/5" : ""
-                  )}                   >
-                    {/* SCROLLABLE STEP AREA */}
-                  <div className="flex gap-1 h-full items-center pl-2 shrink-0">
-                    {Array.from({ length: numSteps }).map((_, stepIdx) => {
-                      const groupIdx = Math.floor(stepIdx / 4);
-                      const isGroupLight = groupIdx % 2 === 0;
-                      const notes = grid[`${chIdx}-${stepIdx}`] || [];
-                      const isActive = notes.length > 0;
-                      const isCurrent = stepIdx === currentStep;
+                      <div
+                        onClick={() => setSelectedChannelForGraph(chIdx)}
 
-                      return (
-                        <button
-                          key={stepIdx}
-                          onMouseDown={(e) => { e.stopPropagation(); setIsMouseDown(true); toggleStep(chIdx, stepIdx, true); }}
-                          onMouseEnter={() => { if (isMouseDown) toggleStep(chIdx, stepIdx); }}
-                          className={cn(
-                            "w-6 h-6 rounded-[1px] transition-all transform active:scale-95 daw-button-outer shrink-0",
-                            isActive ? "step-active" : (isGroupLight ? "step-inactive-light" : "step-inactive-dark"),
-                            isCurrent && "ring-1 ring-white brightness-125 scale-105 z-10 shadow-[0_0_10px_white]"
-                          )}
-                        />
-                      );
-                    })}
-                  </div>
+                        key={chIdx}
+                        className={cn(
+                          "flex w-auto items-center gap-2 h-9 p-1 group hover:bg-white/5 cursor-pointer rounded-sm transition-colors border-b border-white/5 shrink-0",
+                          selectedChannelForGraph === chIdx ? "bg-primary/5" : ""
+                        )}                   >
+                        {/* SCROLLABLE STEP AREA */}
+                        <div
+                          data-action="trackRow"
+                          onMouseDown={(e) => {
+                            e.stopPropagation(); setIsMouseDown(true)
 
-                  <div className="sticky right-0 ml-auto bg-[#1e2329] pl-2 z-10" onClick={(e) => e.stopPropagation()}>
-                    <ChannelSettingsDialog 
-                      channelIdx={chIdx} 
-                      settings={s} 
-                      onUpdate={(k, v) => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], [k]: v }}))}
-                      onBatchUpdate={(ns) => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], ...ns }}))}
-                      onAudition={() => activeClip && playNote({ 
-                        id: 'audition', 
-                        clipId: activeClip.id, 
-                        velocity: 1, 
-                        finePitch: 0,
-                        panOffset: 0,
-                        cutoffOffset: 0,
-                        resOffset: 0
-                      }, chKey, (audioContextRef.current?.currentTime || 0))}
-                    />
-                  </div>
-                  </div>
-                )
-              })
-            }
+                            const stepElement: HTMLDivElement | null = (e.target as HTMLDivElement).closest("[data-step-id]");
+                            const action = (stepElement)?.dataset.action;
+
+                            const stepId = Number(stepElement?.dataset.stepId)
+                            switch (action) {
+                              case 'onMouseDown':
+                                toggleStep(chIdx, stepId, true)
+                                break;
+                              default:
+                                break;
+                            }
+                          }}
+
+                          onMouseEnter={(e) => {
+
+                            const stepElement: HTMLDivElement | null = (e.target as HTMLDivElement).closest("[data-step-id]");
+
+                            const stepId = Number(stepElement?.dataset.stepId)
+
+                            if (isMouseDown) toggleStep(chIdx, stepId)
+
+                          }}
+
+
+                          className="flex gap-1 h-full items-center pl-2 shrink-0">
+                          {Array.from({ length: numSteps }).map((_, stepIdx) => {
+                            const groupIdx = Math.floor(stepIdx / 4);
+                            const isGroupLight = groupIdx % 2 === 0;
+                            const notes = grid[`${chIdx}-${stepIdx}`] || [];
+                            const isActive = notes.length > 0;
+                            const isCurrent = stepIdx === currentStep;
+
+                            return (
+                              <button
+                                data-action="onMouseDown"
+                                data-id={String(stepIdx)}
+                                id={String(stepIdx)}
+
+                                data-step-id={`${stepIdx}`}
+
+                                key={stepIdx}
+                                // onMouseDown={(e) => { e.stopPropagation(); setIsMouseDown(true); toggleStep(chIdx, stepIdx, true); }}
+                                // onMouseEnter={() => { if (isMouseDown) toggleStep(chIdx, stepIdx); }}
+                                className={cn(
+                                  "w-6 h-6 sound-key rounded-[1px] transition-all transform active:scale-95 daw-button-outer shrink-0",
+                                  isActive ? "step-active" : (isGroupLight ? "step-inactive-light" : "step-inactive-dark"),
+                                  isCurrent && "ring-1 ring-white brightness-125 scale-105 z-10 shadow-[0_0_10px_white]"
+                                )}
+                              />
+                            );
+                          })}
+                        </div>
+
+                        <div className="sticky right-0 ml-auto bg-[#1e2329] pl-2 z-10" onClick={(e) => e.stopPropagation()}>
+                          <ChannelSettingsDialog
+                            channelIdx={chIdx}
+                            settings={s}
+                            onUpdate={(k, v) => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], [k]: v } }))}
+                            onBatchUpdate={(ns) => setChannelSettings(p => ({ ...p, [chKey]: { ...p[chKey], ...ns } }))}
+                            onAudition={() => activeClip && playNote({
+                              id: 'audition',
+                              clipId: activeClip.id,
+                              velocity: 1,
+                              finePitch: 0,
+                              panOffset: 0,
+                              cutoffOffset: 0,
+                              resOffset: 0
+                            }, chKey, (audioContextRef.current?.currentTime || 0))}
+                          />
+                        </div>
+                      </div>
+                    </Suspense>
+
+                  )
+                })
+              }
+            </div>
           </div>
         </div>
-        </div>
-       
+
 
         {/* GRAPH EDITOR PANEL - SYNCHRONIZED SCROLL */}
         <div className="h-auto bg-[#1a1f25] border-t border-black p-3 flex flex-col gap-3 shadow-inner shrink-0 z-30">
-           <div className="flex items-center justify-between px-2">
-              <div className="flex gap-2 bg-black/40 p-1 rounded-xl border border-white/5">
-                 {[
-                   { id: 'velocity', label: 'Velocity', icon: Volume2 },
-                   { id: 'finePitch', label: 'Pitch', icon: Music2 },
-                   { id: 'panOffset', label: 'Pan', icon: MousePointer2 },
-                   { id: 'cutoffOffset', label: 'Cutoff', icon: Activity },
-                   { id: 'resOffset', label: 'Res', icon: SlidersHorizontal },
-                 ].map((prop) => (
-                   <button 
-                     key={prop.id}
-                     onClick={() => setActiveGraphProperty(prop.id as GraphProperty)}
-                     className={cn(
-                       "px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
-                       activeGraphProperty === prop.id ? "bg-primary text-black" : "text-muted-foreground hover:text-white hover:bg-white/5"
-                     )}
-                   >
-                     <prop.icon className="w-3 h-3" />
-                     {prop.label}
-                   </button>
-                 ))}
-              </div>
-              <div className="text-[8px] font-black text-primary/60 uppercase tracking-widest flex items-center gap-2">
-                <ChevronRight className="w-3 h-3" /> CHANNEL {selectedChannelForGraph + 1} MODIFIERS
-              </div>
-           </div>
-           
-           <div 
-            
-             className="flex-1  ml-[265px]  w-full   relative"
-           >
-              <div  ref={graphContainerRef}
-             onScroll={handleGraphScroll} className="flex custom-scrollbar gap-1 items-start h-[200px] w-auto max-w-[768px] px-2  overflow-y-hidden overflow-x-auto custom- "> {/* Match the sticky control section width */}
-                {Array.from({ length: numSteps }).map((_, stepIdx) => {
-                  const notes = grid[`${selectedChannelForGraph}-${stepIdx}`] || [];
-                  const val = getGraphValue(stepIdx);
-                  const isActive = notes.length > 0;
-                  
-                  return (
-                    <div key={stepIdx} className="w-6 h-full flex flex-col justify-end group/bar relative shrink-0">
-                       <div 
-                          className={cn(
-                            "w-full rounded-t-md transition-all  daw-button-outer cursor-ns-resize", 
-                            isActive ? "bg-primary/60 group-hover/bar:bg-primary shadow-[0_0_10px_rgba(255,153,0,0.2)]" : "bg-white/5"
-                          )}
-                          style={{ height: `${isActive ? (val * 100) : 0}%` }}
-                          onMouseDown={(e) => {
-                            const rect = e.currentTarget.parentElement?.getBoundingClientRect();
-                            if (!rect) return;
-                            const handleMove = (me: MouseEvent) => {
-                              const raw = Math.max(0, Math.min(1, 1 - (me.clientY - rect.top) / (rect.height)));
-                              updateGraphValue(stepIdx, raw*2);
-                            };
-                            const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
-                            window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
-                          }}
-                       />
-                       {stepIdx % 4 === 0 && <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary/20" />}
-                    </div>
-                  );
-                })}
-              </div>
-           </div>
+          <div className="flex items-center justify-between px-2">
+            <div className="flex gap-2 bg-black/40 p-1 rounded-xl border border-white/5">
+              {[
+                { id: 'velocity', label: 'Velocity', icon: Volume2 },
+                { id: 'finePitch', label: 'Pitch', icon: Music2 },
+                { id: 'panOffset', label: 'Pan', icon: MousePointer2 },
+                { id: 'cutoffOffset', label: 'Cutoff', icon: Activity },
+                { id: 'resOffset', label: 'Res', icon: SlidersHorizontal },
+              ].map((prop) => (
+                <button
+                  key={prop.id}
+                  onClick={() => setActiveGraphProperty(prop.id as GraphProperty)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest transition-all flex items-center gap-2",
+                    activeGraphProperty === prop.id ? "bg-primary text-black" : "text-muted-foreground hover:text-white hover:bg-white/5"
+                  )}
+                >
+                  <prop.icon className="w-3 h-3" />
+                  {prop.label}
+                </button>
+              ))}
+            </div>
+            <div className="text-[8px] font-black text-primary/60 uppercase tracking-widest flex items-center gap-2">
+              <ChevronRight className="w-3 h-3" /> CHANNEL {selectedChannelForGraph + 1} MODIFIERS
+            </div>
+          </div>
+
+          <div
+
+            className="flex-1  ml-[265px]  w-full   relative"
+          >
+            <div ref={graphContainerRef}
+              onScroll={handleGraphScroll} className="flex custom-scrollbar gap-1 items-start h-[200px] w-auto max-w-[768px] px-2  overflow-y-hidden overflow-x-auto custom- "> {/* Match the sticky control section width */}
+              {Array.from({ length: numSteps }).map((_, stepIdx) => {
+                const notes = grid[`${selectedChannelForGraph}-${stepIdx}`] || [];
+                const val = getGraphValue(stepIdx);
+                const isActive = notes.length > 0;
+
+                return (
+                  <div key={stepIdx} className="w-6 h-full flex flex-col justify-end group/bar relative shrink-0">
+                    <div
+                      className={cn(
+                        "w-full rounded-t-md transition-all  daw-button-outer cursor-ns-resize",
+                        isActive ? "bg-primary/60 group-hover/bar:bg-primary shadow-[0_0_10px_rgba(255,153,0,0.2)]" : "bg-white/5"
+                      )}
+                      style={{ height: `${isActive ? (val * 100) : 0}%` }}
+                      onMouseDown={(e) => {
+                        const rect = e.currentTarget.parentElement?.getBoundingClientRect();
+                        if (!rect) return;
+                        const handleMove = (me: MouseEvent) => {
+                          const raw = Math.max(0, Math.min(1, 1 - (me.clientY - rect.top) / (rect.height)));
+                          updateGraphValue(stepIdx, raw * 2);
+                        };
+                        const handleUp = () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
+                        window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
+                      }}
+                    />
+                    {stepIdx % 4 === 0 && <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary/20" />}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>

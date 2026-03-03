@@ -59,10 +59,12 @@ function StudioContent() {
     toast({ title: "Sample Deleted" });
   };
 
+ 
+
   if (!user) return null;
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#0a0a0a] overflow-hidden">
+    <div  className="flex flex-col h-screen w-screen bg-[#0a0a0a] overflow-hidden">
       {/* DAW MAIN INTERFACE */}
       <div className="flex-1 flex overflow-hidden">
         {/* SURGICAL SIDE BROWSER */}
@@ -145,7 +147,7 @@ function StudioContent() {
 
 export default function StudioPage() {
   return (
-    <Suspense fallback={<div className="h-screen bg-black flex items-center justify-center">
+    <Suspense  fallback={<div  className="h-screen bg-black flex items-center justify-center">
       <Logo size={80} />
     </div>}>
       <StudioContent />
