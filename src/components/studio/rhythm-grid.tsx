@@ -523,6 +523,18 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
   }
 
 
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+
+    const data = JSON.parse(e.dataTransfer.getData("application/json"));
+
+    changeClip(String(numChannels), data.id)
+
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
 
   return (
     <div
@@ -538,7 +550,7 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
         <div className="flex items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:text-white/80 hover:bg-white/20"> <ChevronDown/> File</Button>
+              <Button variant="ghost" size="sm" className="h-8 px-2 text-[10px] font-bold text-muted-foreground uppercase hover:text-white/80 hover:bg-white/20"> <ChevronDown /> File</Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="glass-panel border-primary/20 bg-black/90 p-1 min-w-[180px]">
               <DropdownMenuItem onClick={handleSave} className="text-[10px] font-black uppercase text-primary hover:bg-primary/10 cursor-pointer">
@@ -622,7 +634,12 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
 
         {/* SEQUENCER AREA WITH STICKY HEADERS */}
         <div className=' h-[300px] max-h-[300px] overflow-y-auto custom-scrollbar ' >
-          <div
+          <div onDrop={(val) => {
+            handleDrop(val)
+            setNumChannels(p => Math.min(16, p + 1))
+
+          }}
+            onDragOver={handleDragOver}
 
             className="flex w-full h-auto max-w-full overflow-x-hidden overflow-y-auto custom-scrollbar relative"
           >
@@ -731,13 +748,18 @@ export function RhythmGrid({ user, clips, track, onSaveTrack }: {
                 );
               })}
 
-              <Button
-                variant="ghost"
-                className="sticky my-2 left-0 h-8 text-[9px] font-black uppercase text-muted-foreground hover:text-white hover:bg-white/5 mt-4 border border-dashed border-white/5 w-full z-20 shrink-0"
-                onClick={() => setNumChannels(p => Math.min(16, p + 1))}
+              <div className=' w-full  '
+
               >
-                <Plus className="w-3 h-3 mr-2" /> Add Mixer Channel
-              </Button>
+                <Button
+                  variant="ghost"
+                  className="sticky my-2 left-0 h-8 text-[9px] font-black uppercase text-muted-foreground hover:text-white hover:bg-white/5 mt-4 border border-dashed border-white/5 w-full z-20 shrink-0"
+                  onClick={() => setNumChannels(p => Math.min(16, p + 1))}
+                >
+                  <Plus className="w-3 h-3 mr-2" /> Add Mixer Channel
+                </Button>
+              </div>
+
             </div>
 
             <div
