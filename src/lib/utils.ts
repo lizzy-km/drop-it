@@ -5,6 +5,19 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function throttle(func: Function, limit: number) {
+    let inThrottle: boolean;
+    return function (...args: any[]) {
+      if (!inThrottle) {
+        func.apply(this, args);
+        inThrottle = true;
+
+
+        setTimeout(() => inThrottle = false, limit);
+      }
+    }
+  }
+
 //  const handleExportConfig = () => {
 //     const currentTrack: Track = {
 //       id: track?.id || crypto.randomUUID(),

@@ -133,9 +133,9 @@ export const MasterVisualizer = ({ analyser }: { analyser: AnalyserNode | null }
   }, [analyser]);
 
   return (
-    <div className="w-full backdrop-blur-md bg-white/10 rounded-[1rem] overflow-hidden border border-primary/10 relative shadow-inner">
+    <div className="w-full backdrop-blur-md bg-[#343536]/10 rounded-[8] overflow-hidden border border-primary/40 relative shadow-inner">
       <canvas ref={canvasRef} width={800} height={100} className="w-full h-full" />
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-40">
         <Activity className="w-4 h-4 text-primary" />
       </div>
     </div>

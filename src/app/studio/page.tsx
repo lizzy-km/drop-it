@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, Suspense } from 'react';
+import React, { useEffect, useState, Suspense, useCallback } from 'react';
 import { db, User, AudioClip, Track } from '@/lib/db';
 import { VoiceRecorder } from '@/components/studio/voice-recorder';
 import { AudioUploader } from '@/components/studio/audio-uploader';
@@ -63,11 +63,17 @@ function StudioContent() {
 
   };
 
+  // const handleDragStart = useCallback((e: React.DragEvent,clip:AudioClip) => {
+  //   console.log(e.dataTransfer)
+   
+  //   e.dataTransfer.setData("application/json", JSON.stringify(clip));
+  // },[]) 
+
   const handleDragStart = (e: React.DragEvent,clip:AudioClip) => {
    
     e.dataTransfer.setData("application/json", JSON.stringify(clip));
-  };
-
+  
+  }
 
 
 
